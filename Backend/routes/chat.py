@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 import time
 import uuid
-from utils import create_chain, get_session_history, store_chat_history, get_session_id, get_user_sessions
+from utils import create_chain, store_chat_history 
 from routes.auth import verify_jwt_token
 from database.models import chat_history_collection
 import logging
@@ -12,7 +12,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 import nltk
 from flask_cors import CORS
-from database.models import get_database
+from database.models import get_collection
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +23,13 @@ nltk.download("punkt")
 nltk.download('punkt_tab')
 nltk.download("stopwords")
 
+brain_collection = get_collection("aira_brain")
 
-def generate_ai_response(user_input: str, session_id: str) -> dict:
+def generate_ai_response(user_input: str, session_id: str,user_id) -> dict:
     """Generate AI response and store chat history."""
-    chain = create_chain()
     start_time = time.time()
-    ai_response = chain.invoke(
+    print("\n\n\n\nuser id : ",user_id)
+    ai_response = create_chain(user_id).invoke(
         {"input": user_input, "session_id": session_id},
         config={"configurable": {"session_id": session_id}}
     )
@@ -39,6 +40,22 @@ def generate_ai_response(user_input: str, session_id: str) -> dict:
     store_chat_history(session_id, user_input, ai_message)
 
     return {"response_id": response_id, "message": ai_response, "response_time": response_time}
+
+def extract_name(user_input):
+    # Common patterns like "I am Upendra", "My name is Upendra", "I'm Upendra"
+    patterns = [
+        r"\bmy name is ([A-Za-z]+)\b",
+        r"\bi am ([A-Za-z]+)\b",
+        r"\bi'm ([A-Za-z]+)\b",
+        r"\bthis is ([A-Za-z]+)\b"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, user_input, re.IGNORECASE)
+        if match:
+            return match.group(1)  # Extracted name
+    
+    return None  # No match found
 
 @chat_bp.route("/new_session", methods=["POST"])
 def new_session():
@@ -78,51 +95,37 @@ def start_intro():
     # Check if intro session already exists
     session = chat_history_collection.find_one({"user_id": ObjectId(user_id), "title": "Introduction Session"})
     if session:
-        return jsonify({"session_id": session["session_id"]}), 200
+        return jsonify({
+            "session_id": session["session_id"],
+            "message": session["messages"][0]["content"]  # Return first message from AIRA
+        }), 200
 
     # Create a new introduction session
     session_id = str(uuid.uuid4())
+    first_message = "Hello! I'm AIRA. Let's get to know each other. What's your name?"
+    
     chat_history_collection.insert_one({
         "session_id": session_id,
         "user_id": ObjectId(user_id),
         "title": "Introduction Session",
         "messages": [
-            {"role": "AI", "content": "Hello! I'm AIRA. Let's get to know each other. What's your name?", "created_at": time.time()}
+            {"role": "AI", "content": first_message, "created_at": time.time()}
         ],
         "created_at": time.time(),
     })
 
-    return jsonify({"session_id": session_id}), 200
+    return jsonify({
+        "session_id": session_id,
+        "message": first_message  # Return AIRA's first message
+    }), 200
 
-@chat_bp.route("/follow_up", methods=["GET"])
-def follow_up():
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Missing or invalid token"}), 401
-
-    token = auth_header.split(" ")[1]
-    user_id = verify_jwt_token(token)
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    db = get_database()
-    users_collection = db["users"]
-    user = users_collection.find_one({"_id": ObjectId(user_id)})
-    if not user or not user.get("profile_completed"):
-        return jsonify({"error": "Profile not found"}), 400
-
-    name = user.get("name", "friend")
-    greeting = f"Hey {name}, how's it going today? 😊"
-    
-    return jsonify({"message": greeting}), 200
 
 
 @chat_bp.route("/send", methods=["POST"])
 def chat():
     """Handle sending a message and updating the session title based on AIRA's response."""
 
-    # Authentication (assumed)
-    print("Send api")
+    print("Send API called")
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Missing or invalid token"}), 401
@@ -130,47 +133,52 @@ def chat():
     user_id = verify_jwt_token(token)
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    print("User Id : ",user_id)
-    # Parse request
+
     data = request.get_json()
     user_input = data.get("message", "").strip()
     session_id = data.get("session_id")
     if not user_input or not session_id:
         return jsonify({"error": "Message and session ID required"}), 400
-    print("user input : ",user_input)
+
     # Find session
     session = chat_history_collection.find_one({"session_id": session_id, "user_id": ObjectId(user_id)})
     if not session:
         return jsonify({"error": "Session not found or access denied"}), 403
 
-    # Generate AI response
-    response_data = generate_ai_response(user_input, session_id)
+    # Check if this is the "Introduction Session"
+    if session["title"] == "Introduction Session":
+        messages = session.get("messages", [])
 
-    # Debugging response_data
-    print("Full response_data:", response_data)  # Check full structure
+        # If this is the user's first response, assume it's their name
+        if len(messages) == 1:  # Only AIRA's first message exists
+            user_name = extract_name(user_input)
+            brain_collection.update_one(
+                {"user_id": ObjectId(user_id)},
+                {"$set": {"name": user_name}},
+                upsert=True  # Create if not exists
+            )
 
-    # Ensure response_data is a dict and contains 'message'
-    if isinstance(response_data, dict) and "message" in response_data:
-        ai_response = response_data["message"].strip()
-    else:
-        ai_response = ""  # Fallback if key is missing
+            # AIRA responds with the next question
+            ai_response = f"Nice to meet you, {user_name}! Now, tell me, what kind of person are you?"
+            
+            # Store user message
+            messages.append({"role": "User", "content": user_name, "created_at": time.time()})
+            messages.append({"role": "AI", "content": ai_response, "created_at": time.time()})
 
-    print("ai_response:", ai_response)  # Debugging
+            # Update session
+            chat_history_collection.update_one(
+                {"session_id": session_id},
+                {"$set": {"messages": messages}}
+            )
 
-    # Update title if it's the first message
-    messages = session.get("messages", [])
-    if len(messages) == 0 and ai_response:
-        new_title = generate_title(ai_response)  # Use AIRA's response for title
-        print("\n\n\nNew title:", new_title)  # Debugging
-        chat_history_collection.update_one(
-            {"session_id": session_id},
-            {"$set": {"title": new_title}}
-        )
-        session_title = new_title
-    else:
-        session_title = session.get("title", "New Session")
+            return jsonify({"message": ai_response, "session_title": "Introduction Session"}), 200
 
-    return jsonify({**response_data, "session_title": session_title}), 200
+    # Default behavior for normal chat
+    response_data = generate_ai_response(user_input, session_id, user_id)
+    ai_response = response_data.get("message", "").strip()
+
+    return jsonify({**response_data, "session_title": session.get("title", "New Session")}), 200
+
 
 
 def generate_title(message):

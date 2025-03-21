@@ -16,3 +16,4 @@ gunicorn
 nltk
 flask-cors
 Authlib
+spacy
