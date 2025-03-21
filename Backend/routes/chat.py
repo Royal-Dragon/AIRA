@@ -20,6 +20,7 @@ chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
 CORS(chat_bp, supports_credentials=True)
 
 nltk.download("punkt")
+nltk.download('punkt_tab')
 nltk.download("stopwords")
 
 
@@ -121,6 +122,7 @@ def chat():
     """Handle sending a message and updating the session title based on AIRA's response."""
 
     # Authentication (assumed)
+    print("Send api")
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Missing or invalid token"}), 401
@@ -128,14 +130,14 @@ def chat():
     user_id = verify_jwt_token(token)
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-
+    print("User Id : ",user_id)
     # Parse request
     data = request.get_json()
     user_input = data.get("message", "").strip()
     session_id = data.get("session_id")
     if not user_input or not session_id:
         return jsonify({"error": "Message and session ID required"}), 400
-
+    print("user input : ",user_input)
     # Find session
     session = chat_history_collection.find_one({"session_id": session_id, "user_id": ObjectId(user_id)})
     if not session:
@@ -159,7 +161,7 @@ def chat():
     messages = session.get("messages", [])
     if len(messages) == 0 and ai_response:
         new_title = generate_title(ai_response)  # Use AIRA's response for title
-        print("New title:", new_title)  # Debugging
+        print("\n\n\nNew title:", new_title)  # Debugging
         chat_history_collection.update_one(
             {"session_id": session_id},
             {"$set": {"title": new_title}}
