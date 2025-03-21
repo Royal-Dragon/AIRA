@@ -18,18 +18,6 @@ logger = logging.getLogger(__name__)
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
 CORS(chat_bp, supports_credentials=True)
 
-nltk.download("punkt")
-nltk.download("stopwords")
-
-def extract_keywords(text, max_keywords=5):
-    """Extracts important keywords from the given text."""
-    stop_words = set(stopwords.words("english"))
-    words = word_tokenize(text.lower())
-    words = [word for word in words if word.isalnum() and word not in stop_words]
-    word_freq = Counter(words)
-    keywords = [word for word, _ in word_freq.most_common(max_keywords)]
-    return " ".join(keywords).title()
-
 def generate_ai_response(user_input: str, session_id: str) -> dict:
     """Generate AI response and store chat history."""
     chain = create_chain()
@@ -80,7 +68,8 @@ def new_session():
 
 @chat_bp.route("/send", methods=["POST"])
 def chat():
-    """Handle sending a message and updating the session title if it's the first message."""
+    """Handle sending a message and updating the session title based on AIRA's response."""
+
     # Authentication (assumed)
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -102,10 +91,25 @@ def chat():
     if not session:
         return jsonify({"error": "Session not found or access denied"}), 403
 
-    # Update title if first message
+    # Generate AI response
+    response_data = generate_ai_response(user_input, session_id)
+
+    # Debugging response_data
+    print("Full response_data:", response_data)  # Check full structure
+
+    # Ensure response_data is a dict and contains 'message'
+    if isinstance(response_data, dict) and "message" in response_data:
+        ai_response = response_data["message"].strip()
+    else:
+        ai_response = ""  # Fallback if key is missing
+
+    print("ai_response:", ai_response)  # Debugging
+
+    # Update title if it's the first message
     messages = session.get("messages", [])
-    if len(messages) == 0:
-        new_title = generate_title(user_input)
+    if len(messages) == 0 and ai_response:
+        new_title = generate_title(ai_response)  # Use AIRA's response for title
+        print("New title:", new_title)  # Debugging
         chat_history_collection.update_one(
             {"session_id": session_id},
             {"$set": {"title": new_title}}
@@ -114,13 +118,22 @@ def chat():
     else:
         session_title = session.get("title", "New Session")
 
-    # Append message (assume generate_ai_response handles this)
-    response_data = generate_ai_response(user_input, session_id)
     return jsonify({**response_data, "session_title": session_title}), 200
 
 def generate_title(message):
-    """Generate a title from the message."""
-    return message[:30] + "..." if len(message) > 30 else message
+    """Generate a dynamic session title based on important words from AIRA's response."""
+    
+    # Tokenize words and remove stopwords
+    stop_words = set(stopwords.words('english'))
+    words = word_tokenize(message)
+    filtered_words = [word for word in words if word.lower() not in stop_words and word.isalnum()]
+    
+    # Get most frequent words
+    word_counts = Counter(filtered_words)
+    important_words = [word for word, _ in word_counts.most_common(5)]  # Top 5 words
+    
+    # Join to form a title
+    return " ".join(important_words).title() if important_words else "New Session"
 
 @chat_bp.route("/history", methods=["GET"])
 def chat_history():
@@ -180,14 +193,6 @@ def save_session():
         current_title = session.get("title", "New Session")
         title = current_title
 
-        # Auto-generate session title if it's "New Session"
-        if current_title == "New Session" and messages:
-            for msg in messages:
-                if msg.get("sender") == "AIRA":  # Extract keywords from AI response
-                    title = extract_keywords(msg["message"])
-                    break
-            if title == "New Session" and messages:
-                title = " ".join(messages[0]["message"].split()[:5]) + "..."
 
         # Update session title if changed
         if title != current_title:
