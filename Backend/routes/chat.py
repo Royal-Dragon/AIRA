@@ -12,11 +12,16 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 import nltk
 from flask_cors import CORS
+from database.models import get_database
 
 logger = logging.getLogger(__name__)
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
 CORS(chat_bp, supports_credentials=True)
+
+nltk.download("punkt")
+nltk.download("stopwords")
+
 
 def generate_ai_response(user_input: str, session_id: str) -> dict:
     """Generate AI response and store chat history."""
@@ -31,14 +36,6 @@ def generate_ai_response(user_input: str, session_id: str) -> dict:
 
     ai_message = {"role": "AI", "message": ai_response, "response_id": response_id, "created_at": time.time()}
     store_chat_history(session_id, user_input, ai_message)
-
-    session = chat_history_collection.find_one({"session_id": session_id})
-    if session and session.get("title") == "New Session":
-        title = " ".join(user_input.split()[:5]) + "..."
-        chat_history_collection.update_one(
-            {"session_id": session_id},
-            {"$set": {"title": title}}
-        )
 
     return {"response_id": response_id, "message": ai_response, "response_time": response_time}
 
@@ -58,13 +55,66 @@ def new_session():
     session_data = {
         "session_id": session_id,
         "user_id": ObjectId(user_id),
-        "title": "New Session 1",
+        "title": "New Session",
         "messages": []
     }
     chat_history_collection.insert_one(session_data)
 
     print(f"Created new session: {session_id}")  # Debug
     return jsonify({"session_id": session_id, "session_title": "New Session"}), 201
+
+@chat_bp.route("/start_intro", methods=["POST"])
+def start_intro():
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing or invalid token"}), 401
+
+    token = auth_header.split(" ")[1]
+    user_id = verify_jwt_token(token)
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Check if intro session already exists
+    session = chat_history_collection.find_one({"user_id": ObjectId(user_id), "title": "Introduction Session"})
+    if session:
+        return jsonify({"session_id": session["session_id"]}), 200
+
+    # Create a new introduction session
+    session_id = str(uuid.uuid4())
+    chat_history_collection.insert_one({
+        "session_id": session_id,
+        "user_id": ObjectId(user_id),
+        "title": "Introduction Session",
+        "messages": [
+            {"role": "AI", "content": "Hello! I'm AIRA. Let's get to know each other. What's your name?", "created_at": time.time()}
+        ],
+        "created_at": time.time(),
+    })
+
+    return jsonify({"session_id": session_id}), 200
+
+@chat_bp.route("/follow_up", methods=["GET"])
+def follow_up():
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing or invalid token"}), 401
+
+    token = auth_header.split(" ")[1]
+    user_id = verify_jwt_token(token)
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    db = get_database()
+    users_collection = db["users"]
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user or not user.get("profile_completed"):
+        return jsonify({"error": "Profile not found"}), 400
+
+    name = user.get("name", "friend")
+    greeting = f"Hey {name}, how's it going today? 😊"
+    
+    return jsonify({"message": greeting}), 200
+
 
 @chat_bp.route("/send", methods=["POST"])
 def chat():
@@ -119,6 +169,7 @@ def chat():
         session_title = session.get("title", "New Session")
 
     return jsonify({**response_data, "session_title": session_title}), 200
+
 
 def generate_title(message):
     """Generate a dynamic session title based on important words from AIRA's response."""
