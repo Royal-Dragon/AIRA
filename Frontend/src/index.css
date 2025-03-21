@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+input::placeholder {
+  color:#fdfdfd; /* Change this to your desired color */
+  opacity: 1; /* Ensures consistent appearance across browsers */
+}
+input:focus {
+  outline: none;
+  border:none;
+}
+
+
+.animate-fade-in {
+  animation: fade-in 1s ease-in-out;
+}
+
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 3s infinite;
+}
