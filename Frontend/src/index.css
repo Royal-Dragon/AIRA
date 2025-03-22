@@ -5,7 +5,7 @@
   to { opacity: 1; }
 }
 input::placeholder {
-  color:#fdfdfd; /* Change this to your desired color */
+  color:#ffffff; /* Change this to your desired color */
   opacity: 1; /* Ensures consistent appearance across browsers */
 }
 input:focus {
