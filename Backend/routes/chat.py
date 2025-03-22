@@ -13,6 +13,7 @@ from nltk.tokenize import word_tokenize
 import nltk
 from flask_cors import CORS
 from database.models import get_collection
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,59 @@ def extract_name(user_input):
     for pattern in patterns:
         match = re.search(pattern, user_input, re.IGNORECASE)
         if match:
-            return match.group(1)  # Extracted name
+            return match.group(1).capitalize()  # Extracted name
     
     return None  # No match found
+
+def extract_user_info(user_input, field):
+    """Extracts specific user information based on the expected field."""
+    user_input = user_input.lower()
+
+    if field == "name":
+        return extract_name(user_input)  # Assuming you already have a function for extracting names
+
+    elif field == "sex":
+        if "male" in user_input:
+            return "Male"
+        elif "female" in user_input:
+            return "Female"
+        elif "other" in user_input:
+            return "Other"
+
+    elif field == "age":
+        match = re.search(r"(\d{1,2})\s*(years? old|y/o|yr|yrs|age)?", user_input)
+        return match.group(1) if match else None
+
+    elif field == "height":
+        match_cm = re.search(r"(\d{2,3})\s*(cm|centimeters?)", user_input)
+        match_ft = re.search(r"(\d)'(\d{1,2})", user_input)  # Example: 5'11
+        if match_cm:
+            return f"{match_cm.group(1)} cm"
+        elif match_ft:
+            return f"{match_ft.group(1)}' {match_ft.group(2)}"
+
+    elif field == "weight":
+        match_kg = re.search(r"(\d{2,3})\s*(kg|kilograms?)", user_input)
+        match_lbs = re.search(r"(\d{2,3})\s*(lbs|pounds?)", user_input)
+        if match_kg:
+            return f"{match_kg.group(1)} kg"
+        elif match_lbs:
+            return f"{match_lbs.group(1)} lbs"
+
+    elif field == "habits":
+        return user_input  # Can improve with NLP, but for now, store directly
+
+    elif field == "interests":
+        return user_input  # Store hobbies/interests as-is
+
+    return None  # If nothing extracted
+
+def extract_keywords(text):
+    """Extracts meaningful words from text while filtering stopwords."""
+    stop_words = set(stopwords.words("english"))
+    words = word_tokenize(text)
+    filtered_words = [word for word in words if word.lower() not in stop_words and word.isalnum()]
+    return filtered_words
 
 @chat_bp.route("/new_session", methods=["POST"])
 def new_session():
@@ -102,7 +153,7 @@ def start_intro():
 
     # Create a new introduction session
     session_id = str(uuid.uuid4())
-    first_message = "Hello! I'm AIRA. Let's get to know each other. What's your name?"
+    first_message = "Hey there! 😊 I'm AIRA. I'd love to get to know you better. What's your name?"
     
     chat_history_collection.insert_one({
         "session_id": session_id,
@@ -125,7 +176,7 @@ def start_intro():
 def chat():
     """Handle sending a message and updating the session title based on AIRA's response."""
 
-    print("Send API called")
+    # Authentication and input validation
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Missing or invalid token"}), 401
@@ -137,64 +188,151 @@ def chat():
     data = request.get_json()
     user_input = data.get("message", "").strip()
     session_id = data.get("session_id")
-    if not user_input or not session_id:
-        return jsonify({"error": "Message and session ID required"}), 400
+    if not session_id:
+        return jsonify({"error": "Session ID required"}), 400
 
-    # Find session
+    # Define the fields and questions in order, starting with "name"
+    brain_fields = ["name", "sex", "age", "height", "weight", "habits", "interests"]
+    questions = [
+        "Hey there! 😊 I'm AIRA. I'd love to get to know you better. What's your name?",  # Matches /start_intro
+        "Great! How do you identify? (Male, Female, or Other)",
+        "Awesome! How old are you?",
+        "Got it! How tall are you? You can share in cm or feet.",
+        "And what’s your weight? You can tell me in kg or lbs—whichever you prefer!",
+        "Nice! Can you tell me about some of your daily habits?",
+        "Lastly, what are some things you love doing? Any hobbies or interests?"
+    ]
+
+
+    # Find the session
     session = chat_history_collection.find_one({"session_id": session_id, "user_id": ObjectId(user_id)})
     if not session:
         return jsonify({"error": "Session not found or access denied"}), 403
 
-    # Check if this is the "Introduction Session"
+    # Handle the Introduction Session
     if session["title"] == "Introduction Session":
-        messages = session.get("messages", [])
+        # Get current user data from the database
+        user_data = brain_collection.find_one({"user_id": ObjectId(user_id)}) or {}
+        current_field = session.get("current_field")
 
-        # If this is the user's first response, assume it's their name
-        if len(messages) == 1:  # Only AIRA's first message exists
-            user_name = extract_name(user_input)
-            brain_collection.update_one(
-                {"user_id": ObjectId(user_id)},
-                {"$set": {"name": user_name}},
-                upsert=True  # Create if not exists
-            )
+        # If current_field is not set, start with the first missing field
+        if current_field is None:
+            for field in brain_fields:
+                if field not in user_data:
+                    current_field = field
+                    break
+            else:
+                current_field = None  # All fields are filled
 
-            # AIRA responds with the next question
-            ai_response = f"Nice to meet you, {user_name}! Now, tell me, what kind of person are you?"
-            
-            # Store user message
-            messages.append({"role": "User", "content": user_name, "created_at": time.time()})
+        if current_field:
+            question_index = brain_fields.index(current_field)
+            question = questions[question_index]
+
+            # If no user input yet, ask the current question
+            if not user_input:
+                ai_response = question
+            else:
+                # Extract only the current field's information
+                extracted_value = extract_user_info(user_input, current_field)
+                if extracted_value:
+                    # Store the value in the brain_collection database
+                    brain_collection.update_one(
+                        {"user_id": ObjectId(user_id)},
+                        {"$set": {current_field: extracted_value}},
+                        upsert=True
+                    )
+                    # Update local user_data for the next check
+                    user_data[current_field] = extracted_value
+                    # Find the next missing field
+                    next_field = None
+                    for field in brain_fields[question_index + 1:]:
+                        if field not in user_data:
+                            next_field = field
+                            break
+                    if next_field:
+                        ai_response = f"Got it! {questions[brain_fields.index(next_field)]}"
+                        chat_history_collection.update_one(
+                            {"session_id": session_id},
+                            {"$set": {"current_field": next_field}}
+                        )
+                    else:
+                        ai_response = "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!"
+                        chat_history_collection.update_one(
+                            {"session_id": session_id},
+                            {"$set": {"current_field": None}}
+                        )
+                else:
+                    # If the response doesn’t match, ask the same question again
+                    ai_response = f"I didn’t quite get that. {question}"
+
+            # Update the chat history with messages
+            messages = session.get("messages", [])
+            if user_input:
+                messages.append({"role": "User", "content": user_input, "created_at": time.time()})
             messages.append({"role": "AI", "content": ai_response, "created_at": time.time()})
-
-            # Update session
             chat_history_collection.update_one(
                 {"session_id": session_id},
                 {"$set": {"messages": messages}}
             )
-
             return jsonify({"message": ai_response, "session_title": "Introduction Session"}), 200
 
-    # Default behavior for normal chat
+        else:
+            # Introduction complete, proceed to normal chat
+            if user_input:
+                response_data = generate_ai_response(user_input, session_id, user_id)
+                return jsonify({**response_data, "session_title": "Introduction Session"}), 200
+            return jsonify({"message": "Introduction complete. You can now start chatting.", "session_title": "Introduction Session"}), 200
+
+    # Handle normal chat (non-introduction sessions)
+    if not user_input:
+        return jsonify({"error": "Message required for normal chat"}), 400
+    
     response_data = generate_ai_response(user_input, session_id, user_id)
-    ai_response = response_data.get("message", "").strip()
 
-    return jsonify({**response_data, "session_title": session.get("title", "New Session")}), 200
+    # Ensure response_data is a dict and contains 'message'
+    if isinstance(response_data, dict) and "message" in response_data:
+        ai_response = response_data["message"].strip()
+    else:
+        ai_response = ""  # Fallback if key is missing
+
+    print("ai_response:", ai_response)  # Debugging
+
+    # Update title if it's the first message
+    messages = session.get("messages", [])
+    if len(messages) == 0 and ai_response:
+        new_title = generate_title(ai_response)  # Use AIRA's response for title
+        print("\n\n\nNew title:", new_title)  # Debugging
+        chat_history_collection.update_one(
+            {"session_id": session_id},
+            {"$set": {"title": new_title}}
+        )
+        session_title = new_title
+    else:
+        session_title = session.get("title", "New Session")
+
+    return jsonify({**response_data, "session_title": session_title}), 200
 
 
+# Define words to avoid in titles
+negative_words = {"stressful", "tired", "worried", "anxious", "nervous", "sad", "bad", "boring", "exams", "breakup"}
 
-def generate_title(message):
-    """Generate a dynamic session title based on important words from AIRA's response."""
+def generate_title(aira_response):
+    """Generates a short, natural title (4-5 words) based on AIRA's response."""
+
+    # Tokenize response into sentences and words
+    words = word_tokenize(aira_response)
+
+    # Remove stopwords and non-alphabetic words
+    stop_words = set(stopwords.words("english"))
+    meaningful_words = [word for word in words if word.lower() not in stop_words and word.isalnum()]
+    print("meaning ful words : ",meaningful_words)
+    # Pick the first 4-5 meaningful words
+    title_words = meaningful_words[:5]  # Keep only the first few important words
     
-    # Tokenize words and remove stopwords
-    stop_words = set(stopwords.words('english'))
-    words = word_tokenize(message)
-    filtered_words = [word for word in words if word.lower() not in stop_words and word.isalnum()]
-    
-    # Get most frequent words
-    word_counts = Counter(filtered_words)
-    important_words = [word for word, _ in word_counts.most_common(5)]  # Top 5 words
-    
-    # Join to form a title
-    return " ".join(important_words).title() if important_words else "New Session"
+    # Create a natural title
+    title = " ".join(title_words).title() if title_words else "New Chat"
+
+    return title
 
 @chat_bp.route("/history", methods=["GET"])
 def chat_history():
@@ -221,52 +359,6 @@ def chat_history():
         logger.error(f"Error retrieving chat history: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-@chat_bp.route("/save_session", methods=["POST"])
-def save_session():
-    """Saves a session with a generated title."""
-    try:
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            return jsonify({"error": "Missing or invalid token"}), 401
-        
-        token = auth_header.split(" ")[1]
-        user_id = verify_jwt_token(token)
-        if not user_id:
-            return jsonify({"error": "Unauthorized. Please log in."}), 401
-
-        # Extract JSON Data from Request
-        data = request.get_json()
-        session_id = data.get("session_id")
-        session_title = data.get("session_title", "New Session")
-        messages = data.get("messages", [])
-
-        if not session_id:
-            return jsonify({"error": "Missing session_id"}), 400
-        
-        # Ensure session_id and user_id match a session in DB
-        query = {"session_id": session_id, "user_id": ObjectId(user_id)}
-        session = chat_history_collection.find_one(query)
-
-        if not session:
-            return jsonify({"error": "Session not found"}), 404
-
-        # Extract current messages & session title
-        current_title = session.get("title", "New Session")
-        title = current_title
-
-
-        # Update session title if changed
-        if title != current_title:
-            chat_history_collection.update_one(
-                {"session_id": session_id}, {"$set": {"title": title}}
-            )
-            print(f"✅ Session {session_id} updated with title: {title}")
-
-        return jsonify({"message": "Session saved successfully", "title": title}), 200
-
-    except Exception as e:
-        print(f"❌ Error saving session: {e}")
-        return jsonify({"error": "Internal server error"}), 500
 
 @chat_bp.route("/sessions", methods=["GET"])
 def get_sessions():
