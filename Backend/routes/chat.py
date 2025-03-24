@@ -14,6 +14,8 @@ import nltk
 from flask_cors import CORS
 from database.models import get_collection
 import random
+from essentials import get_user_details,CATEGORY_KEYWORDS
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -24,23 +26,147 @@ nltk.download("punkt")
 nltk.download('punkt_tab')
 nltk.download("stopwords")
 
+## Database collections
 brain_collection = get_collection("aira_brain")
+acknowledgments_collection = get_collection("acknowledgments")
+reminders_collection = get_collection("reminders")
 
-def generate_ai_response(user_input: str, session_id: str,user_id) -> dict:
-    """Generate AI response and store chat history."""
+
+# Ensure TTL index is created (Deletes documents after 120 seconds)
+acknowledgments_collection.create_index("timestamp", expireAfterSeconds=120)
+
+def preprocess_text(text):
+    """Tokenize and remove stopwords for better categorization."""
+    stop_words = set(stopwords.words('english'))
+    words = word_tokenize(text.lower())
+    return [word for word in words if word.isalnum() and word not in stop_words]
+
+def categorize_input(user_input):
+    """Categorize user input based on predefined keywords."""
+    words = preprocess_text(user_input)
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(word in words for word in keywords):
+            return category
+    return "casual_chat"
+
+def store_user_data(user_id, category, user_input, confirmed):
+    """Store user data based on category and user confirmation."""
+    if not confirmed:
+        return "No worries! I won’t remember this."
+
+    if category == "goals":
+        brain_collection.update_one(
+            {"user_id": ObjectId(user_id)},
+            {"$push": {"goals": user_input}},
+            upsert=True
+        )
+        return "Got it! I'll remember your goal."
+
+    elif category == "reminders":
+        reminders_collection.insert_one({
+            "user_id": ObjectId(user_id),
+            "reminder": user_input,
+            "timestamp": datetime.datetime.utcnow(),
+            "expires_at": datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        })
+        return "Noted! I'll remind you for today."
+
+    elif category == "personal_details":
+        brain_collection.update_one(
+            {"user_id": ObjectId(user_id)},
+            {"$push": {"personal_details": user_input}},
+            upsert=True
+        )
+        return "Understood! I'll remember this."
+
+    return "I'll just keep this in our session."
+
+def store_acknowledgment(session_id, detail):
+    """Store acknowledgment in the database with a timestamp."""
+    acknowledgments_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {"detail": detail, "timestamp": datetime.utcnow()}},
+        upsert=True
+    )
+
+def get_recent_acknowledgment(session_id):
+    """Retrieve the last acknowledgment for a session."""
+    ack = acknowledgments_collection.find_one({"session_id": session_id})
+    return ack["detail"] if ack else None
+
+def get_relevant_user_detail(user_id, user_input, session_id):
+    """Fetch relevant user details while avoiding repeated acknowledgments and skipping age."""
+    user_data = get_user_details(user_id)
+    if not user_data:
+        return None  # No stored details
+
+    references = []
+
+    if "interests" in user_data:
+        for interest in user_data["interests"]:
+            if interest.lower() in user_input.lower():
+                references.append(f"I remember you’re interested in {interest}.")
+
+    if "hobbies" in user_data:
+        for hobby in user_data["hobbies"]:
+            if hobby.lower() in user_input.lower():
+                references.append(f"I remember you enjoy {hobby}.")
+
+    if "sex" in user_data and "gender" in user_input.lower():
+        references.append(f"You identify as {user_data['sex']}.")
+
+    if not references:
+        return None
+
+    # Check if an acknowledgment was recently used
+    last_ack = get_recent_acknowledgment(session_id)
+    if last_ack:
+        return None  # Avoid repeating
+
+    selected_reference = random.choice(references)
+    store_acknowledgment(session_id, selected_reference)  # Store acknowledgment
+
+    return selected_reference
+
+pending_confirmations = {}
+
+def generate_ai_response(user_input: str, session_id: str, user_id) -> dict:
+    """Generate AI response and ask for confirmation when needed."""
     start_time = time.time()
-    print("\n\n\n\nuser id : ",user_id)
+    
+    # Check if awaiting confirmation
+    if session_id in pending_confirmations:
+        category, original_message = pending_confirmations.pop(session_id)
+        
+        if user_input.lower() == "yes":
+            store_user_data(user_id, category, original_message, confirmed=True)
+            return {"response_id": str(uuid.uuid4()), "message": "Got it! I'll remember this.", "response_time": round(time.time() - start_time, 2)}
+        
+        elif user_input.lower() == "no":
+            return {"response_id": str(uuid.uuid4()), "message": "No worries! I won’t remember this.", "response_time": round(time.time() - start_time, 2)}
+
+    # Categorize user input
+    category = categorize_input(user_input)
+    print("\n\n\ncategory : ",category)
+    if category in ["goals", "reminders", "personal_details"]:
+        confirmation_message = f"Would you like me to remember this as {category.replace('_', ' ')}? (Yes/No)"
+        pending_confirmations[session_id] = (category, user_input)  # Store confirmation request
+        return {"response_id": str(uuid.uuid4()), "message": confirmation_message, "response_time": round(time.time() - start_time, 2)}
+
+    # Normal AI response
     ai_response = create_chain(user_id).invoke(
         {"input": user_input, "session_id": session_id},
         config={"configurable": {"session_id": session_id}}
     )
-    response_time = round(time.time() - start_time, 2)
-    response_id = str(uuid.uuid4())
 
+    response_id = str(uuid.uuid4())
+    response_time = round(time.time() - start_time, 2)
     ai_message = {"role": "AI", "message": ai_response, "response_id": response_id, "created_at": time.time()}
+    
     store_chat_history(session_id, user_input, ai_message)
 
     return {"response_id": response_id, "message": ai_response, "response_time": response_time}
+
 
 def extract_name(user_input):
     # Common patterns like "I am Upendra", "My name is Upendra", "I'm Upendra"
@@ -129,7 +255,7 @@ def new_session():
     }
     chat_history_collection.insert_one(session_data)
 
-    print(f"Created new session: {session_id}")  # Debug
+    # print(f"Created new session: {session_id}")  # Debug
     return jsonify({"session_id": session_id, "session_title": "New Session"}), 201
 
 @chat_bp.route("/start_intro", methods=["POST"])
@@ -295,13 +421,13 @@ def chat():
     else:
         ai_response = ""  # Fallback if key is missing
 
-    print("ai_response:", ai_response)  # Debugging
+    # print("ai_response:", ai_response)  # Debugging
 
     # Update title if it's the first message
     messages = session.get("messages", [])
     if len(messages) == 0 and ai_response:
         new_title = generate_title(ai_response)  # Use AIRA's response for title
-        print("\n\n\nNew title:", new_title)  # Debugging
+        # print("\n\n\nNew title:", new_title)  # Debugging
         chat_history_collection.update_one(
             {"session_id": session_id},
             {"$set": {"title": new_title}}
@@ -325,7 +451,7 @@ def generate_title(aira_response):
     # Remove stopwords and non-alphabetic words
     stop_words = set(stopwords.words("english"))
     meaningful_words = [word for word in words if word.lower() not in stop_words and word.isalnum()]
-    print("meaning ful words : ",meaningful_words)
+    # print("meaning ful words : ",meaningful_words)
     # Pick the first 4-5 meaningful words
     title_words = meaningful_words[:5]  # Keep only the first few important words
     

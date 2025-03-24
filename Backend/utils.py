@@ -10,11 +10,12 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnableMap
 from config import GROQ_API_KEY,JWT_SECRET_KEY
-from database.models import chat_history_collection, brain_collection
+from database.models import chat_history_collection
 from bson import ObjectId
 from flask import request
 import jwt
 import datetime
+from essentials import get_user_details
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +24,6 @@ model = None
 embedding_model = None
 retriever = None
 session_cache = {}
-
-def get_user_name(user_id):
-    """Fetch user name from Brain collection."""
-    user_data = brain_collection.find_one({"user_id": ObjectId(user_id)}, {"name": 1})
-    return user_data["name"] if user_data else "User"
 
 def store_chat_history(session_id: str, user_input: str, ai_response: str):
     """Store chat history in MongoDB."""
@@ -91,12 +87,45 @@ def get_user_sessions(user_id: str) -> list:
     except Exception as e:
         logger.error(f"Error retrieving user sessions: {e}")
         return []
+    
 
+## Based on user make the conversation
 def create_chain(user_id):
     """Creates a conversation chain dynamically with user-specific prompt and RAG retrieval."""
     
-    user_name = get_user_name(user_id)  # Fetch name from Brain collection
-    system_prompt = f"You are AIRA, an AI assistant. You are talking to {user_name}. Engage in meaningful conversations and remember key details about the user. Keep your responses clear, concise, and engaging."
+    user_details = get_user_details(user_id)
+    
+    ## The system prompt
+    if not user_details:
+        system_prompt = "You are AIRA, an AI assistant. Engage in meaningful conversations and remember key details about the user. Keep responses clear, concise, and engaging."
+    else:
+        # Start with basic introduction
+        system_prompt = f"You are AIRA, an AI assistant. You are talking to {user_details.get('name', 'User')}."
+
+        # Dynamically add only relevant details
+        detail_sentences = []
+        
+        if "age" in user_details:
+            detail_sentences.append(f"They are {user_details['age']} years old.")
+        if "sex" in user_details:
+            detail_sentences.append(f"They identify as {user_details['sex']}.")
+        if "height" in user_details:
+            detail_sentences.append(f"Their height is {user_details['height']}.")
+        if "weight" in user_details:
+            detail_sentences.append(f"Their weight is {user_details['weight']}.")
+        if "interests" in user_details:
+            detail_sentences.append(f"They are interested in {', '.join(user_details['interests'])}.")
+        if "hobbies" in user_details:
+            detail_sentences.append(f"Their hobbies include {', '.join(user_details['hobbies'])}.")
+
+        # Only include details if they exist
+        if detail_sentences:
+            system_prompt += " " + " ".join(detail_sentences)
+
+        system_prompt += " Engage in meaningful conversations and remember key details about the user. Keep responses clear, concise, and engaging."
+
+        # print("\n\n\nFinal prompt : ",system_prompt)
+
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),

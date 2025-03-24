@@ -12,6 +12,8 @@ question_collection = None
 sessions_collection = None  
 auth_codes_collection = None
 brain_collection = None
+acknowledgments_collection = None
+reminders_collection = None
 
 def init_db(app: Flask):  
     """Initialize the database connection"""
@@ -31,7 +33,7 @@ def get_database():
 
 def initialize_collections():
     """Ensure database is initialized after setting collections"""
-    global users_collection, chat_history_collection, feedback_collection, question_collection, sessions_collection, auth_codes_collection, brain_collection
+    global users_collection, chat_history_collection, feedback_collection, question_collection, sessions_collection, auth_codes_collection, brain_collection, acknowledgments_collection, reminders_collection
 
     try:
         db = mongo.db  
@@ -49,6 +51,8 @@ def initialize_collections():
         sessions_collection = db["sessions"]  
         auth_codes_collection = db["auth_codes"]
         brain_collection = db["aira_brain"]
+        acknowledgments_collection = db["acknowledgments"]
+        reminders_collection = db["reminders"]
 
         # Debugging print statements
         print(f"✅ Collections initialized successfully!")
