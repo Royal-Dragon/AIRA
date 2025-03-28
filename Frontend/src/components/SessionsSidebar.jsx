@@ -1,6 +1,9 @@
 import React from "react";
 import useAuthStore from "../store/authStore";
 import { logoutUser } from "../api/auth";
+import AiraLogo from "../assets/aira.svg";
+import AddIcon from "../assets/add.svg";
+import MenuIcon from "../assets/menu.svg";
 
 const SessionsSidebar = ({
   sessions,
@@ -24,29 +27,34 @@ const SessionsSidebar = ({
   return (
     <div className="w-1/4 bg-[#151B1F]  text-white p-4 flex flex-col">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold">Chat Sessions</h2>
+        {/* <h2 className="text-lg font-bold text-linear-to-r from-cyan-500 to-blue-500 ">AIRA</h2> */}
+        <img src={AiraLogo} alt="Like" className="w-25 h-10" />
         <button
-          className="text-sm bg-red-600 px-2 py-1 rounded hover:bg-red-700"
+          className="text-sm bg-linear-to-r from-cyan-500 to-blue-500  px-1 py-1 rounded "
           onClick={performLogout}
         >
-          Logout
+          <img src={MenuIcon} alt="Like" className="w-5 h-5 mr-2" />
         </button>
       </div>
+      <div className="flex justify-center border-b-2 border-[#606567]">
       <button
-        className="bg-blue-600 text-white px-4 py-2 rounded mb-4 hover:bg-blue-700"
+        className="bg-linear-to-r from-blue-500 to-cyan-500  text-white px-10 py-4 flex justify-center rounded-3xl mb-4 hover:bg-blue-700"
         onClick={onNewSession}
       >
-        Add New Session
+        <img src={AddIcon} alt="Like" className="" /> <span>Add New Session</span>
       </button>
-      <div className="flex-1 overflow-y-auto">
+      </div>
+      
+      <div className="flex-1 flex-col pt-3 overflow-y-auto">
         {sessions.length > 0 ? (
-          sessions.map((session) => (
+          sessions.slice()
+      .reverse().map((session) => (
             <div
               key={session.session_id}
               className={`p-2 mb-2 cursor-pointer rounded ${
                 activeSession === session.session_id
                   ? "bg-blue-500"
-                  : "bg-gray-700 hover:bg-gray-600"
+                  : " hover:bg-gray-600"
               }`}
               onClick={() => onSelectSession(session.session_id)}
             >
@@ -57,6 +65,12 @@ const SessionsSidebar = ({
           <p className="text-gray-400">No sessions available</p>
         )}
       </div>
+      <button
+          className="flex justify-center text-lg bg-linear-to-r from-cyan-500 to-blue-500  px-1 py-2 rounded "
+          onClick={performLogout}
+        >
+          <img src={MenuIcon} alt="Like" className="w-5 h-5 mt-1 mr-2" /><span>LOGOUT</span>
+        </button>
     </div>
   );
 };

@@ -8,7 +8,7 @@ import ChatIcon  from '../assets/chat.svg';
 import CopiedIcon  from '../assets/copy 1.svg';
 
 const FeedbackButtons = ({ responseId, responseText }) => {
-  console.log("response id from feedback buttons : ", responseId);
+  // console.log("response id from feedback buttons : ", responseId);
   const { submitFeedback, feedback } = useFeedbackStore();
   const [isCommentModalOpen, setCommentModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -42,14 +42,15 @@ const FeedbackButtons = ({ responseId, responseText }) => {
   };
 
   return (
-    <div className="flex gap-3 text-amber-50 rounded-2xl bg-gray-800">
-    <p className="pl-2 -mr-2">AIRA</p>
+    <div className="flex ">
+    <div className="flex gap-4 text-amber-50 rounded-xl p-1 ml-2.5 ">
+    <p className="pl-2 -mr-2 text-md">AIRA</p>
       {/* Like Button */}
       <button
       onClick={handleLike}
       className={` pl-2 -mr-2 py-1 rounded flex items-center `}
     >
-      {isLiked?<img src={LikeIcon} alt="Like" className="w-5 h-5 mr-2" />:<img src={LikedIcon} alt="Like" className="w-5 h-5 mr-2" />}
+      {isLiked?<img src={LikedIcon} alt="Like" className="w-4 h-4 mr-2" />:<img src={LikeIcon} alt="Like" className="w-4 h-4 mr-2" />}
     </button>
 
       {/* Dislike Button */}
@@ -57,7 +58,7 @@ const FeedbackButtons = ({ responseId, responseText }) => {
         onClick={handleDislike}
         className={` py-1 -mr-2 rounded text-white `}
       >
-        <img src={DisLikeIcon} alt="Like" className="w-5 h-5 mr-2" />
+        <img src={DisLikeIcon} alt="Like" className="w-4 h-4 mr-2" />
       </button>
 
       {/* Comment Button */}
@@ -65,7 +66,7 @@ const FeedbackButtons = ({ responseId, responseText }) => {
         onClick={handleComment}
         className={`py-1 -mr-2 rounded text-white `}
       >
-        <img src={ChatIcon} alt="Like" className="w-5 h-5 mr-2" />
+        <img src={ChatIcon} alt="Like" className="w-4 h-4 mr-2" />
       </button>
 
       {/* Copy Button */}
@@ -73,7 +74,7 @@ const FeedbackButtons = ({ responseId, responseText }) => {
         onClick={handleCopy}
         className={` py-1 rounded text-white `}
       >
-        {copied ? "✅" : <img src={CopiedIcon} alt="Like" className="w-5 h-5 mr-2" />}
+        {copied ? "✅" : <img src={CopiedIcon} alt="Like" className="w-4 h-4 mr-2" />}
       </button>
 
       {/* Comment Modal */}
@@ -83,6 +84,7 @@ const FeedbackButtons = ({ responseId, responseText }) => {
           onClose={() => setCommentModalOpen(false)}
         />
       )}
+    </div>
     </div>
   );
 };

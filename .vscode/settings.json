@@ -1,4 +1,8 @@
 {
+<<<<<<< HEAD
     "editor.fontSize": 10,
     "editor.mouseWheelZoom": true
+=======
+    "editor.fontSize": 14
+>>>>>>> 95963c71331b8354c776c27360a64b220a99de94
 }
