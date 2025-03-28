@@ -17,3 +17,4 @@ nltk
 flask-cors
 Authlib
 spacy
+sklearn
