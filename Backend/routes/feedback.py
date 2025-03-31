@@ -9,10 +9,12 @@ from functions.feedback_functions import (
     handle_like_dislike,
     handle_comment,
     get_remembered_messages,
-    handle_remember,
+    handle_daily_reminder,
+    handle_personal_info_or_goals,
     get_daily_feedback_collection,
     validate_daily_feedback_data,
-    insert_daily_feedback
+    insert_daily_feedback,
+    clean_expired_reminders
 )
 from utils import get_session_id
 import logging
@@ -42,28 +44,47 @@ def submit_feedback():
     response_id = data.get("response_id")
     comment = data.get("comment", "").strip()
 
-    feedback_collection = get_feedback_collection()
-    user_feedback = get_user_feedback(feedback_collection, user_id)
+    # Get user messages for the response
+    user_message, aira_response, error = get_remembered_messages(user_id, response_id)
+    if error:
+        return error
 
+    # Handle different feedback types
     if feedback_type in ["like", "dislike"]:
+        feedback_collection = get_feedback_collection()
+        user_feedback = get_user_feedback(feedback_collection, user_id)
         handle_like_dislike(user_feedback, response_id, feedback_type)
+        success, error = update_user_feedback(feedback_collection, user_id, user_feedback)
+    
     elif feedback_type == "comment":
+        feedback_collection = get_feedback_collection()
+        user_feedback = get_user_feedback(feedback_collection, user_id)
         handle_comment(user_feedback, response_id, comment)
-    elif feedback_type == "remember":
-        user_message, aira_response, error = get_remembered_messages(user_id, response_id)
-        if error:
-            return error
-        handle_remember(user_feedback, response_id, user_message, aira_response)
+        success, error = update_user_feedback(feedback_collection, user_id, user_feedback)
+    
+    elif feedback_type == "daily_reminders":
+        feedback_collection = get_feedback_collection()
+        user_feedback = get_user_feedback(feedback_collection, user_id)
+        handle_daily_reminder(user_feedback, response_id, user_message, aira_response)
+        success, error = update_user_feedback(feedback_collection, user_id, user_feedback)
+    
+    elif feedback_type in ["goals", "personal_info"]:
+        success, error = handle_personal_info_or_goals(
+            user_id, response_id, user_message, aira_response, feedback_type
+        )
+    
+    else:
+        success = False
+        error = (jsonify({"error": "Unknown feedback type"}), 400)
 
-    success, error = update_user_feedback(feedback_collection, user_id, user_feedback)
     if not success:
         return error
 
     return jsonify({"message": "Feedback recorded successfully"}), 200
 
-@feedback_bp.route("/daily_feedback", methods=["POST"])
+@feedback_bp.route("/daily", methods=["POST"])
 def submit_daily_feedback():
-    """Submit daily experience feedback."""
+    """Submit daily feedback for chatbot sessions."""
     if not request.json:
         logger.warning("No JSON data provided in request")
         return jsonify({"error": "No data provided"}), 400
@@ -72,18 +93,36 @@ def submit_daily_feedback():
     if error:
         return error
 
+    session_id = get_session_id(request)
+    if not session_id:
+        return jsonify({"error": "Invalid session"}), 400
+
     data = request.json
-    session_id = get_session_id()
     is_valid, error = validate_daily_feedback_data(data, session_id)
     if not is_valid:
         return error
 
     rating = data.get("rating")
-    comment = data.get("comment", "").strip()
-    daily_feedback_collection = get_daily_feedback_collection()
+    comment = data.get("comment", "")
 
-    success, error = insert_daily_feedback(daily_feedback_collection, user_id, session_id, rating, comment)
+    daily_feedback_collection = get_daily_feedback_collection()
+    success, error = insert_daily_feedback(
+        daily_feedback_collection, user_id, session_id, rating, comment
+    )
     if not success:
         return error
 
-    return jsonify({"message": "Daily experience feedback submitted successfully"}), 200
+    return jsonify({"message": "Daily feedback recorded successfully"}), 200
+
+@feedback_bp.route("/clean-reminders", methods=["POST"])
+def clean_reminders():
+    """Endpoint to manually trigger cleanup of expired reminders."""
+    user_id, error = get_user_id_from_token(request)
+    if error:
+        return error
+        
+    success = clean_expired_reminders()
+    if not success:
+        return jsonify({"error": "Failed to clean expired reminders"}), 500
+        
+    return jsonify({"message": "Expired reminders cleaned successfully"}), 200

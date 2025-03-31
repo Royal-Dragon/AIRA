@@ -10,7 +10,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import RunnableMap
 from config import GROQ_API_KEY,JWT_SECRET_KEY
-from database.models import chat_history_collection, brain_collection
+from database.models import chat_history_collection, get_collection
 from bson import ObjectId
 from flask import request
 import jwt
@@ -25,9 +25,30 @@ retriever = None
 session_cache = {}
 
 def get_user_name(user_id):
-    """Fetch user name from Brain collection."""
-    user_data = brain_collection.find_one({"user_id": ObjectId(user_id)}, {"name": 1})
-    return user_data["name"] if user_data else "User"
+    # Ensure user_id is an ObjectId
+    try:
+        if not isinstance(user_id, ObjectId):
+            user_id_obj = ObjectId(user_id)
+        else:
+            user_id_obj = user_id
+    except:
+        print(f"Invalid user_id format: {user_id}")
+        return "User"  # Default if ID format is invalid
+    
+    # Query the database
+    try:
+        brain_collection = get_collection("aira_brain")
+        user_data = brain_collection.find_one({"user_id": user_id_obj}, {"name": 1})
+        
+        # Check if user_data exists and has a name field
+        if user_data and "name" in user_data and user_data["name"]:
+            return user_data["name"]
+        else:
+            print(f"No name found for user_id: {user_id}")
+            return "User"  # Default if name not found
+    except Exception as e:
+        print(f"Error retrieving user name: {str(e)}")
+        return "User"  # Default in case of any error
 
 def store_chat_history(session_id: str, user_input: str, ai_response: str):
     """Store chat history in MongoDB."""
