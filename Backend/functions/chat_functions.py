@@ -45,6 +45,7 @@ def generate_ai_response(user_input: str, session_id: str, user_id, create_sessi
             store_chat_history(session_id, user_input, ai_message)
 
         return {
+            "role":"AI",
             "response_id": response_id,
             "message": ai_message["message"],
             "response_time": response_time
@@ -71,6 +72,7 @@ def generate_ai_response(user_input: str, session_id: str, user_id, create_sessi
         store_chat_history(session_id, user_input, ai_message)
 
     return {
+        "role":"AI",
         "response_id": response_id,
         "message": ai_response,
         "response_time": response_time
