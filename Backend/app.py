@@ -7,11 +7,14 @@ from database.models import init_db, mongo
 from extensions import oauth
 # Import blueprints after DB initialization
 import logging
+from functions.chat_functions import setup_auto_deletion_task
 
 app = Flask(__name__)
 app.secret_key = "980ee0c12459ea17135388fd5a22e152"
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "OPTIONS"])
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+setup_auto_deletion_task()
 
 # Initialize OAuth with the Flask app
 oauth.init_app(app)
