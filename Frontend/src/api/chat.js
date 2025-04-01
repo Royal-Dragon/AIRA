@@ -51,7 +51,7 @@ export const sendMessageApi = async (message, session_id) => {
       const errorData = await response.json();
       throw new Error(errorData.error || "Failed to send message");
     }
-    // console.log(response.json());
+    console.log("ai response ",response);
     return await response.json();
   } catch (error) {
     console.error("Error sending message:", error);
