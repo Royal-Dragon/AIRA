@@ -188,7 +188,7 @@ def chat():
                         ai_response = f"Got it! {questions[brain_fields.index(next_field)]}"
                         session["current_field"] = next_field
                     else:
-                        ai_response = "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!"
+                        ai_response = "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you! For further conversation start a new session."
                         session["current_field"] = None
                 else:
                     ai_response = f"I didn't quite get that. {question}"

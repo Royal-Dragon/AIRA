@@ -24,6 +24,10 @@ def get_feedback_collection():
     """Retrieve the feedback collection."""
     return get_collection("feedback")
 
+def get_reminder_collection():
+    """Retrieve the reminders collection."""
+    return get_collection("reminders")
+
 def get_daily_feedback_collection():
     """Retrieve the daily feedback collection."""
     return get_collection("daily_feedback")
@@ -133,37 +137,20 @@ def get_remembered_messages(user_id, response_id):
                 break
         if aira_response:
             break
-    print("\n\n aira response from feedback : ",aira_response)
+    # print("\n\n aira response from feedback : ",aira_response)
     if not user_message or not aira_response:
         return None, None, (jsonify({"error": "Incomplete chat data"}), 400)
     
     return user_message, aira_response, None
 
-
-def handle_daily_reminder(user_feedback, response_id, user_message, aira_response):
-    """Handle 'daily_reminders' feedback by storing messages with expiration."""
-    user_feedback["daily_reminders"].append({
-        "response_id": response_id,
-        "user_message": user_message,
-        "aira_response": aira_response,
-        "timestamp": datetime.utcnow(),
-        "expires_at": datetime.utcnow() + timedelta(days=1)  # Set expiration to 24 hours
-    })
-    
-    # Clean up expired reminders
-    current_time = datetime.utcnow()
-    user_feedback["daily_reminders"] = [
-        reminder for reminder in user_feedback["daily_reminders"] 
-        if "expires_at" not in reminder or reminder["expires_at"] > current_time
-    ]
-
-def handle_personal_info_or_goals(user_id, response_id, user_message, aira_response, feedback_type):
+def handle_personal_info_or_goals(user_id, response_id, goals, personal_info, feedback_type):
     """Handle 'personal_info' or 'goals' feedback by storing in brain collection."""
     brain_collection = get_brain_collection()
     
     # Get or initialize user brain document
-    print("\n\n BRAIN COLLECTION IN FEEDBACK",user_id)
+    logging.info(f"Fetching brain collection for user: {user_id}")
     brain_doc = brain_collection.find_one({"user_id": ObjectId(user_id)})
+    
     if not brain_doc:
         brain_doc = {
             "user_id": ObjectId(user_id),
@@ -185,30 +172,43 @@ def handle_personal_info_or_goals(user_id, response_id, user_message, aira_respo
     if "goals" not in brain_doc:
         brain_doc["goals"] = []
     
-    # Add to the appropriate list
+    # Validate input data
+    if feedback_type not in ["personal_info", "goals"]:
+        logging.error(f"Invalid feedback type: {feedback_type}")
+        return False, (jsonify({"error": "Invalid feedback type"}), 400)
+    
+    # Construct entry
     entry = {
         "response_id": response_id,
-        "user_message": user_message,
-        "aira_response": aira_response,
         "timestamp": datetime.utcnow()
     }
     
     if feedback_type == "personal_info":
-        brain_doc["personal_info"].append(entry)
+        if personal_info:
+            entry["data"] = personal_info
+            brain_doc["personal_info"].append(entry)
+        else:
+            logging.warning("Empty personal_info received, skipping update.")
     elif feedback_type == "goals":
-        brain_doc["goals"].append(entry)
+        if goals:
+            entry["data"] = goals
+            brain_doc["goals"].append(entry)
+        else:
+            logging.warning("Empty goals received, skipping update.")
     
-    # Update brain document
+    # Update or insert brain document
     try:
         brain_collection.update_one(
             {"user_id": ObjectId(user_id)},
             {"$set": brain_doc},
             upsert=True
         )
+        logging.info("Brain collection updated successfully.")
         return True, None
     except Exception as e:
-        logger.error(f"Database error in handle_personal_info_or_goals: {str(e)}")
+        logging.error(f"Database error in handle_personal_info_or_goals: {str(e)}")
         return False, (jsonify({"error": "Database error", "details": str(e)}), 500)
+
 
 def validate_daily_feedback_data(data, session_id):
     """Validate daily feedback submission data."""
