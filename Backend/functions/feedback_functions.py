@@ -1,6 +1,6 @@
 from database.models import get_collection
 from bson.objectid import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from routes.auth import verify_jwt_token
 from flask import jsonify
 import logging
@@ -28,18 +28,26 @@ def get_daily_feedback_collection():
     """Retrieve the daily feedback collection."""
     return get_collection("daily_feedback")
 
+def get_brain_collection():
+    """Retrieve the brain collection for storing personal info and goals."""
+    return get_collection("aira_brain")
+
 def validate_feedback_data(data):
     """Validate feedback submission data."""
     response_id = data.get("response_id")
     feedback_type = data.get("feedback_type")
     comment = data.get("comment", "").strip()
-    valid_types = ["like", "dislike", "comment", "remember"]
+    
+    # Updated valid feedback types
+    valid_types = ["like", "dislike", "comment", "goals", "daily_reminders", "personal_info"]
+    
     if not response_id or feedback_type not in valid_types:
         logger.warning(f"Invalid feedback data: response_id={response_id}, feedback_type={feedback_type}")
         return False, (jsonify({
             "error": "Invalid feedback data",
-            "details": "response_id and feedback_type ('like', 'dislike', 'comment', 'remember') are required."
+            "details": f"response_id and feedback_type {valid_types} are required."
         }), 400)
+    
     if feedback_type == "comment" and not comment:
         return False, (jsonify({"error": "Comment required", "details": "Comment cannot be empty."}), 400)
     return True, None
@@ -48,7 +56,15 @@ def get_user_feedback(feedback_collection, user_id):
     """Fetch or initialize user feedback document."""
     user_feedback = feedback_collection.find_one({"_id": ObjectId(user_id)})
     if not user_feedback:
-        user_feedback = {"_id": ObjectId(user_id), "feedback": [], "remembered_messages": []}
+        user_feedback = {
+            "_id": ObjectId(user_id), 
+            "feedback": [], 
+            "daily_reminders": []  # Updated from remembered_messages to daily_reminders
+        }
+    elif "remembered_messages" in user_feedback:
+        # Migrate existing data structure if needed
+        user_feedback["daily_reminders"] = user_feedback.pop("remembered_messages", [])
+    
     return user_feedback
 
 def update_user_feedback(feedback_collection, user_id, user_feedback):
@@ -91,36 +107,108 @@ def handle_comment(user_feedback, response_id, comment):
         })
 
 def get_remembered_messages(user_id, response_id):
-    """Retrieve user message and AI response for 'remember' feedback."""
+    """Retrieve user message and AI response for various feedback types."""
     chat_collection = get_collection("chat_history")
     chat_data = chat_collection.find_one({
         "user_id": ObjectId(user_id),
-        "messages": {"$elemMatch": {"role": "AI", "message.response_id": response_id}}
+        "sessions.messages": {"$elemMatch": {"role": "AI", "response_id": {"$regex": response_id}}}
     })
+    # print("\n chat_data : ",chat_data)
     if not chat_data:
         return None, None, (jsonify({"error": "Chat data not found"}), 404)
+    
     user_message = None
     aira_response = None
-    for i in range(len(chat_data["messages"])):
-        msg = chat_data["messages"][i]
-        if msg["role"] == "AI" and isinstance(msg["message"], dict):
-            if msg["message"].get("response_id") == response_id:
-                if i > 0 and chat_data["messages"][i - 1]["role"] == "user":
-                    user_message = chat_data["messages"][i - 1]["message"]
-                aira_response = msg["message"]["message"]
+    
+    for session in chat_data.get("sessions", []):
+        messages = session.get("messages", [])
+        # print("\n Messages : ",messages)
+        for i in range(len(messages)):
+            msg = messages[i]
+            # print("\n Messages : ",msg)
+            if msg["role"] == "AI" and response_id in msg.get("response_id", ""):
+                if i > 0 and messages[i - 1]["role"] == "User":
+                    user_message = messages[i - 1]["content"]
+                aira_response = msg["content"]
                 break
+        if aira_response:
+            break
+    print("\n\n aira response from feedback : ",aira_response)
     if not user_message or not aira_response:
         return None, None, (jsonify({"error": "Incomplete chat data"}), 400)
+    
     return user_message, aira_response, None
 
-def handle_remember(user_feedback, response_id, user_message, aira_response):
-    """Handle 'remember' feedback by storing messages."""
-    user_feedback["remembered_messages"].append({
+
+def handle_daily_reminder(user_feedback, response_id, user_message, aira_response):
+    """Handle 'daily_reminders' feedback by storing messages with expiration."""
+    user_feedback["daily_reminders"].append({
+        "response_id": response_id,
+        "user_message": user_message,
+        "aira_response": aira_response,
+        "timestamp": datetime.utcnow(),
+        "expires_at": datetime.utcnow() + timedelta(days=1)  # Set expiration to 24 hours
+    })
+    
+    # Clean up expired reminders
+    current_time = datetime.utcnow()
+    user_feedback["daily_reminders"] = [
+        reminder for reminder in user_feedback["daily_reminders"] 
+        if "expires_at" not in reminder or reminder["expires_at"] > current_time
+    ]
+
+def handle_personal_info_or_goals(user_id, response_id, user_message, aira_response, feedback_type):
+    """Handle 'personal_info' or 'goals' feedback by storing in brain collection."""
+    brain_collection = get_brain_collection()
+    
+    # Get or initialize user brain document
+    print("\n\n BRAIN COLLECTION IN FEEDBACK",user_id)
+    brain_doc = brain_collection.find_one({"user_id": ObjectId(user_id)})
+    if not brain_doc:
+        brain_doc = {
+            "user_id": ObjectId(user_id),
+            "name": "",
+            "sex": "",
+            "age": "",
+            "height": "",
+            "weight": "",
+            "habits": "",
+            "interests": "",
+            "assessments": [],
+            "personal_info": [],
+            "goals": []
+        }
+    
+    # Ensure the necessary lists exist
+    if "personal_info" not in brain_doc:
+        brain_doc["personal_info"] = []
+    if "goals" not in brain_doc:
+        brain_doc["goals"] = []
+    
+    # Add to the appropriate list
+    entry = {
         "response_id": response_id,
         "user_message": user_message,
         "aira_response": aira_response,
         "timestamp": datetime.utcnow()
-    })
+    }
+    
+    if feedback_type == "personal_info":
+        brain_doc["personal_info"].append(entry)
+    elif feedback_type == "goals":
+        brain_doc["goals"].append(entry)
+    
+    # Update brain document
+    try:
+        brain_collection.update_one(
+            {"user_id": ObjectId(user_id)},
+            {"$set": brain_doc},
+            upsert=True
+        )
+        return True, None
+    except Exception as e:
+        logger.error(f"Database error in handle_personal_info_or_goals: {str(e)}")
+        return False, (jsonify({"error": "Database error", "details": str(e)}), 500)
 
 def validate_daily_feedback_data(data, session_id):
     """Validate daily feedback submission data."""
@@ -146,3 +234,34 @@ def insert_daily_feedback(daily_feedback_collection, user_id, session_id, rating
     except Exception as e:
         logger.error(f"Database error in insert_daily_feedback: {str(e)}")
         return False, (jsonify({"error": "Database error", "details": str(e)}), 500)
+
+def clean_expired_reminders():
+    """Utility function to clean up expired reminders across all users."""
+    try:
+        feedback_collection = get_feedback_collection()
+        current_time = datetime.utcnow()
+        
+        # Find all user documents
+        users = feedback_collection.find({})
+        
+        for user in users:
+            if "daily_reminders" in user:
+                # Filter out expired reminders
+                updated_reminders = [
+                    reminder for reminder in user["daily_reminders"]
+                    if "expires_at" not in reminder or reminder["expires_at"] > current_time
+                ]
+                
+                # Update document if reminders were removed
+                if len(updated_reminders) != len(user["daily_reminders"]):
+                    feedback_collection.update_one(
+                        {"_id": user["_id"]},
+                        {"$set": {"daily_reminders": updated_reminders}}
+                    )
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error cleaning expired reminders: {str(e)}")
+        return False
+    
+    

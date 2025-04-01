@@ -12,7 +12,12 @@ user_bp = Blueprint("user", __name__, url_prefix="/api/user")
 @user_bp.route("/profile", methods=["GET"])
 def get_profile():
     """Retrieve user profile safely."""
-    user_id = verify_jwt_token(request)
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing or invalid token"}), 401
+    
+    token = auth_header.split(" ")[1]
+    user_id = verify_jwt_token(token)
     if not user_id:
         return jsonify({"error": "Unauthorized. Please log in."}), 401
 
@@ -36,7 +41,12 @@ def get_profile():
 @user_bp.route("/update", methods=["PUT"])
 def update_profile():
     """Update user profile safely."""
-    user_id = verify_jwt_token(request)
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing or invalid token"}), 401
+    
+    token = auth_header.split(" ")[1]
+    user_id = verify_jwt_token(token)
     if not user_id:
         return jsonify({"error": "Unauthorized. Please log in."}), 401
 
