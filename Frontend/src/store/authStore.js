@@ -32,6 +32,7 @@ if (storedUser && storedAccessToken && storedRefreshToken) {
     refreshToken: storedRefreshToken,
     isAuthenticated: true,
   });
+  
 }
 
 export default useAuthStore;

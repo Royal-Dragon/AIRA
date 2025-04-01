@@ -1,7 +1,9 @@
 import { create } from 'zustand';
-import { sendMessageApi, saveSessionApi, fetchSessionsApi, fetchSessionHistoryApi , createNewSessionApi } from '../api/chat';
+import { persist } from 'zustand/middleware';
+import { sendMessageApi, saveSessionApi, fetchSessionsApi, fetchSessionHistoryApi , startIntroSessionApi } from '../api/chat';
  
-const useChatStore = create((set, get) => ({
+const useChatStore = create(
+  persist((set, get) => ({
   messages: [],
   sessions: [],
   session_history:[],
@@ -11,7 +13,7 @@ const useChatStore = create((set, get) => ({
   setActiveSession: (sessionId) => set({ activeSession: sessionId }),
 
   addSession: (newSession) => set((state) => ({
-    sessions: [...state.sessions, newSession],
+    sessions: [newSession, ...state.sessions], // Prepend instead of append
   })),
 
   sendMessage: async (message, sessionId) => {
@@ -72,27 +74,47 @@ const useChatStore = create((set, get) => ({
       const response = await fetchSessionsApi();
       console.log("Sessions fetched:", response);
       let sessions = response.sessions || [];
-    
-      
+  
+      // If no sessions exist, call the start_intro API
       if (sessions.length === 0) {
-        console.log("No sessions found, creating a new one...");
-        const newSession = await createNewSessionApi();
-        sessions = [newSession];
-        console.log("New session created:", newSession);
+        console.log("No sessions found. Starting intro session...");
+        const introSession = await startIntroSessionApi(); // Call the start_intro API
+        sessions = [introSession];
+        
+        // Add the intro session to the store
+        set({
+          sessions: [
+            {
+              session_id: introSession.session_id,
+              session_title: "Introduction Session",
+            },
+          ],
+        });
+        set({ 
+          sessions,
+          messages: [{
+            role: "AI",
+            message: introSession.message
+          }]
+        });
+      } else {
+        // Update store with fetched sessions
+        set({ sessions });
       }
-
-    
-
-    if (sessions.length > 0 && !get().activeSession) {
-      console.log("Setting active session to:", sessions[0].session_id);
-      set({ activeSession: sessions[0].session_id });
-      await get().fetchSessionHistory(sessions[0].session_id);
+  
+      // Set active session if none exists
+      if (sessions.length > 0 && !get().activeSession) {
+        console.log("Setting active session to:", sessions[0].session_id);
+        set({ activeSession: sessions[0].session_id });
+        await get().fetchSessionHistory(sessions[0].session_id); // Fetch history for the active session
+      }
+  
+      return sessions;
+    } catch (error) {
+      console.error("Failed to fetch sessions:", error);
     }
-    return sessions;
-  } catch (error) {
-    console.error('Failed to fetch sessions:', error);
-  }
-},
+  },
+  
 
   fetchSessionHistory: async (session_id) => {
     try {
@@ -115,7 +137,15 @@ const useChatStore = create((set, get) => ({
       console.error('Error fetching session history:', error);
     }
   },
-  
-}));
+}),
+{
+  name: 'chat-storage', // LocalStorage key
+  partialize: (state) => ({
+    sessions: state.sessions,
+    activeSession: state.activeSession
+  }), // Only persist these fields
+}
+)
+);
 
 export default useChatStore;

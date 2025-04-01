@@ -16,6 +16,23 @@ export const createNewSessionApi = async () => {
     return await response.json();
   };
   
+  export const startIntroSessionApi = async () => {
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) throw new Error("No access token found");
+  
+    const response = await fetch(`${API_BASE_URL}/start_intro`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+    console.log("Fetched response from the start intro session : ",response.json())
+    if (!response.ok) throw new Error("Failed to start intro session");
+    return await response.json();
+  };
+  
+
 export const sendMessageApi = async (message, session_id) => {
   try {
     const accessToken = localStorage.getItem("accessToken");
