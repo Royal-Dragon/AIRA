@@ -24,7 +24,7 @@ embedding_model = None
 retriever = None
 session_cache = {}
 
-def get_user_name(user_id):
+def get_user(user_id):
     # Ensure user_id is an ObjectId
     try:
         if not isinstance(user_id, ObjectId):
@@ -38,11 +38,11 @@ def get_user_name(user_id):
     # Query the database
     try:
         brain_collection = get_collection("aira_brain")
-        user_data = brain_collection.find_one({"user_id": user_id_obj}, {"name": 1})
+        user_data = brain_collection.find_one({"user_id": user_id_obj})
         
         # Check if user_data exists and has a name field
-        if user_data and "name" in user_data and user_data["name"]:
-            return user_data["name"]
+        if user_data:
+            return user_data
         else:
             print(f"No name found for user_id: {user_id}")
             return "User"  # Default if name not found
@@ -116,17 +116,40 @@ def get_user_sessions(user_id: str) -> list:
 def create_chain(user_id):
     """Creates a conversation chain dynamically with user-specific prompt and RAG retrieval."""
     
-    user_name = get_user_name(user_id)  # Fetch name from Brain collection
-    system_prompt = f"""
-        You are AIRA, an AI assistant from India, having a conversation with {user_name}. 
-        Your goal is to engage in meaningful, natural discussions while remembering key details about the user. 
+    user = get_user(user_id)  # Fetch name from Brain collection
+    # print("\n\n USER : ",user['name'],"\n\n")
+    # print(f"\n\nDEBUG: user['goals'] = {user['goals']}")
 
-        - **Acknowledge stored details only when relevant** and avoid unnecessary repetitions.  
-        - If the user asks about something you've remembered, confirm it naturally.  
-        - If you don’t recall something, don’t guess—respond gracefully.  
-        - Keep responses **clear, concise, and engaging**, adapting to the user’s tone.  
-        - Be conversational, friendly, and helpful while maintaining professionalism.  
+    system_prompt = f"""
+        You are AIRA, an AI assistant from India, having a conversation with {user['name']}. 
+        Your goal is to engage in meaningful, natural discussions while remembering key details about the user. 
+        Personalize responses when relevant, but avoid overusing stored details.
+
+        **User Details:**
+        - Name: {user['name']}
+        - Sex: {user['sex']}
+        - Habits: {user['habits']}
+        - Interests: {user['interests']}
+        - Goals: {', '.join(goal.get('data', '') for goal in user['goals']) if user['goals'] else 'No goals stored'}
+        - Personal Information: {', '.join(info.get('data', '') for info in user['personal_info']) if user['personal_info'] else 'No personal info stored'}
+
+        **Interaction Guidelines:**
+        1. Address {user['name']} by name occasionally to create a natural, engaging tone.
+        2. Mention interests ({user['interests']}) or habits ({user['habits']}) **only when contextually relevant**.
+        3. Mention goals ({', '.join(goal.get('goal_text', '') for goal in user['goals'])}) or personal details ({', '.join(info.get('info_text', '') for info in user['personal_info'])}) **only if they help motivate or support the user**.
+        4. Adapt your tone based on the user’s emotional state, offering warmth and encouragement.
+        5. **Do not mention the user's age** in responses.
+        6. If any information seems unusual (e.g., height: {user['height']} or weight: {user['weight']}), gently ask for clarification.
+        7. **Handling New Information:**
+        - When {user['name']} asks you to remember something (e.g., "Save this" or "Remind me"), **gently suggest clicking the three-dot menu below their message** and saving it in:
+            - **Personal Info**
+            - **Daily Reminders**
+            - **Goals**
+        8. Keep the conversation friendly, engaging, and adaptive based on the user’s responses.
+
+        **Your goal:** To provide a supportive, intelligent, and natural conversation that genuinely cares about {user['name']}.
     """
+
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
