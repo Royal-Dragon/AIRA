@@ -109,34 +109,51 @@ def submit_feedback():
         
         print(f"Scheduled time (IST): {base_time_ist}")
         
-        # Store time in IST instead of UTC
-        scheduled_time = base_time_ist  # Keep it in IST
-
-        # Optional: Store timezone info explicitly (MongoDB supports timezone-aware datetimes)
-        # scheduled_time = scheduled_time.astimezone(pytz.timezone("Asia/Kolkata"))
+        # Convert back to UTC for storage
+        scheduled_time_utc = base_time_ist.astimezone(pytz.UTC)
+        # Format the time for storage
+        formatted_time_ist = base_time_ist.strftime("%Y-%m-%d %H:%M:%S")
         
-        print(f"Scheduled time (UTC for storage): {scheduled_time}")
+        print(f"Scheduled time (UTC for storage): {formatted_time_ist}")
 
-        # Prepare the reminder data with a unique _id
-        reminder_data = {
-            "_id": ObjectId(),
-            "generated_reminder": reminder,
-            "scheduled_time": scheduled_time,
-            "status": "pending"
-        }
+        # Check if a reminder already exists for this user and time slot
+        existing_reminder = reminder_collection.find_one({
+            "user_id": user_id,
+            "reminders": {
+                "$elemMatch": {
+                    "scheduled_time": formatted_time_ist,
+                    "status": "pending"
+                }
+            }
+        })
 
-        try:
-            # Add the reminder to the user's document in the reminder collection
-            reminder_collection.update_one(
-                {"user_id": user_id},
-                {"$push": {"reminders": reminder_data}},
-                upsert=True
-            )
+        if existing_reminder:
+            # A reminder already exists for this time slot
             success = True
             error = None
-        except Exception as e:
-            success = False
-            error = (jsonify({"error": f"Failed to save reminder: {str(e)}"}), 500)
+            print(f"Reminder already exists for {formatted_time_ist}, not adding a duplicate")
+        else:
+            # Prepare the reminder data with a unique _id
+            reminder_data = {
+                "_id": ObjectId(),
+                "generated_reminder": reminder,
+                "scheduled_time": formatted_time_ist,
+                "status": "pending"
+            }
+
+            try:
+                # Add the reminder to the user's document in the reminder collection
+                reminder_collection.update_one(
+                    {"user_id": user_id},
+                    {"$push": {"reminders": reminder_data}},
+                    upsert=True
+                )
+                success = True
+                error = None
+                print(f"Added new reminder for {formatted_time_ist}")
+            except Exception as e:
+                success = False
+                error = (jsonify({"error": f"Failed to save reminder: {str(e)}"}), 500)
     
     elif feedback_type in ["goals", "personal_info"]:
         goals=extract_goal(user_message,aira_response)

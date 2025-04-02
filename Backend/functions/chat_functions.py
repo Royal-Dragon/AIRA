@@ -8,6 +8,8 @@ from nltk.tokenize import word_tokenize
 import nltk
 import logging
 from database.models import chat_history_collection
+import pytz
+from datetime import datetime
 
 
 nltk.download("punkt")
@@ -33,11 +35,18 @@ def generate_ai_response(user_input: str, session_id: str, user_id, create_sessi
         response_time = round(time.time() - start_time, 2)
         response_id = str(uuid.uuid4())
 
+        # Convert to Indian Standard Time (IST)
+        india_timezone = pytz.timezone("Asia/Kolkata")
+        current_time_ist = datetime.now(india_timezone)
+        
+        # Format current date and time in a human-readable format
+        formatted_time_ist = current_time_ist.strftime("%Y-%m-%d %H:%M:%S")
+
         ai_message = {
             "role": "AI",
             "message": recalled_response,  # Directly use refined response
             "response_id": response_id,
-            "created_at": time.time()
+            "created_at": formatted_time_ist
         }
 
         # Only store in separate document if create_session is True
@@ -60,11 +69,18 @@ def generate_ai_response(user_input: str, session_id: str, user_id, create_sessi
     response_time = round(time.time() - start_time, 2)
     response_id = str(uuid.uuid4())
 
+    # Convert to Indian Standard Time (IST)
+    india_timezone = pytz.timezone("Asia/Kolkata")
+    current_time_ist = datetime.now(india_timezone)
+    
+    # Format current date and time in a human-readable format
+    formatted_time_ist = current_time_ist.strftime("%Y-%m-%d %H:%M:%S")
+
     ai_message = {
         "role": "AI",
         "message": ai_response,
         "response_id": response_id,
-        "created_at": time.time()
+        "created_at": formatted_time_ist
     }
 
     # Only store in separate document if create_session is True
