@@ -11,6 +11,7 @@ from functions.chat_functions import (
     generate_title
 )
 from datetime import datetime, timedelta
+import pytz
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -38,14 +39,22 @@ def new_session():
         return jsonify({"error": "Unauthorized"}), 401
 
     user_id_obj = ObjectId(user_id)
-    current_time = time.time()
+    current_time_utc = time.time()
     session_id = str(ObjectId())
+
+    # Convert to Indian Standard Time (IST)
+    india_timezone = pytz.timezone("Asia/Kolkata")
+    current_time_ist = datetime.now(india_timezone)
+
+    # Format current date and time in a human-readable format
+    formatted_time_ist = current_time_ist.strftime("%Y-%m-%d %H:%M:%S")
     new_session = {
         "session_id": session_id,
         "title": "New Session",
         "messages": [],
-        "created_at": current_time,
-        "last_active": current_time
+        "created_at": current_time_utc,  # Store the UTC timestamp for consistency
+        "last_active": current_time_utc,  # Store the UTC timestamp for consistency
+        "created_at_ist": formatted_time_ist  # Store the IST formatted date-time
     }
 
     # Find or create user document
@@ -89,15 +98,23 @@ def start_intro():
 
     # Create new introduction session
     session_id = str(ObjectId())
-    current_time = time.time()
+    current_time_utc  = time.time()
     first_message = "Hey there! 😊 I'm AIRA. I'd love to get to know you better. What's your name?"
+    
+    # Convert to Indian Standard Time (IST)
+    india_timezone = pytz.timezone("Asia/Kolkata")
+    current_time_ist = datetime.now(india_timezone)
+    
+    # Format current date and time in a human-readable format
+    formatted_time_ist = current_time_ist.strftime("%Y-%m-%d %H:%M:%S")
+    
     new_session = {
         "session_id": session_id,
-        "title": "Introduction Session",
-        "messages": [{"role": "AI", "content": first_message, "created_at": current_time}],
-        "created_at": current_time,
-        "last_active": current_time,
-        "current_field": "name"
+        "title": "New Session",
+        "messages": [],
+        "created_at": current_time_utc,  # Store the UTC timestamp for consistency
+        "last_active": current_time_utc,  # Store the UTC timestamp for consistency
+        "created_at_ist": formatted_time_ist  # Store the IST formatted date-time
     }
 
     if not user_doc:
@@ -152,6 +169,13 @@ def chat():
         "Lastly, what are some things you love doing? Any hobbies or interests?"
     ]
 
+    # Convert to Indian Standard Time (IST)
+    india_timezone = pytz.timezone("Asia/Kolkata")
+    current_time_ist = datetime.now(india_timezone)
+                
+    # Format current date and time in a human-readable format
+    formatted_time_ist = current_time_ist.strftime("%Y-%m-%d %H:%M:%S")
+
     if session["title"] == "Introduction Session":
         user_data = brain_collection.find_one({"user_id": user_id_obj}) or {}
         current_field = session.get("current_field")
@@ -192,10 +216,10 @@ def chat():
                         session["current_field"] = None
                 else:
                     ai_response = f"I didn't quite get that. {question}"
-
+            
             if user_input:
-                messages.append({"role": "User", "content": user_input, "created_at": current_time})
-            messages.append({"role": "AI", "content": ai_response, "created_at": current_time})
+                messages.append({"role": "User", "content": user_input, "created_at": formatted_time_ist})
+            messages.append({"role": "AI", "content": ai_response, "created_at": formatted_time_ist})
             session["messages"] = messages
             session["last_active"] = current_time
 
@@ -222,8 +246,8 @@ def chat():
     # print("\n\n AI RESPONSE FROM SEND ROUTE : ",ai_response)
     is_first_message = len(messages) == 0
     if user_input:
-        messages.append({"role": "User", "content": user_input, "created_at": current_time})
-    messages.append({"role": "AI","response_id":ai_response_id, "content": ai_response, "created_at": current_time})
+        messages.append({"role": "User", "content": user_input, "created_at": formatted_time_ist})
+    messages.append({"role": "AI","response_id":ai_response_id, "content": ai_response, "created_at": formatted_time_ist})
 
     new_title = session["title"]
     if is_first_message and ai_response and session["title"] != "Introduction Session":

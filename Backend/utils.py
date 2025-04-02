@@ -15,6 +15,7 @@ from bson import ObjectId
 from flask import request
 import jwt
 import datetime
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -119,37 +120,44 @@ def create_chain(user_id):
     user = get_user(user_id)  # Fetch name from Brain collection
     # print("\n\n USER : ",user['name'],"\n\n")
     # print(f"\n\nDEBUG: user['goals'] = {user['goals']}")
+    # Ensure `user` is a valid JSON string before parsing
+    if isinstance(user, str) and user.strip():  # Avoid empty strings
+        try:
+            user = json.loads(user)  # Convert JSON string to dictionary
+        except json.JSONDecodeError:
+            user = {}  # Default to an empty dictionary if decoding fails
+    elif not isinstance(user, dict):
+        user = {}  # Ensure user is always a dictionary
 
     system_prompt = f"""
-        You are AIRA, an AI assistant from India, having a conversation with {user['name']}. 
+        You are AIRA, an AI assistant from India, having a conversation with {user.get('name','user')}. 
         Your goal is to engage in meaningful, natural discussions while remembering key details about the user. 
         Personalize responses when relevant, but avoid overusing stored details.
 
         **User Details:**
-        - Name: {user['name']}
-        - Sex: {user['sex']}
-        - Habits: {user['habits']}
-        - Interests: {user['interests']}
-        - Goals: {', '.join(goal.get('data', '') for goal in user['goals']) if user['goals'] else 'No goals stored'}
-        - Personal Information: {', '.join(info.get('data', '') for info in user['personal_info']) if user['personal_info'] else 'No personal info stored'}
+        - Name: {user.get('name','user')}
+        - Sex: {user.get('sex', 'Not specified')}
+        - Habits: {user.get('habits', 'No habits stored')}
+        - Interests: {user.get('interests', 'No interests stored')}
+        - Goals: {', '.join(goal.get('data', '') for goal in user.get('goals', [])) if user.get('goals') else 'No goals stored'}
+        - Personal Information: {', '.join(info.get('data', '') for info in user.get('personal_info', [])) if user.get('personal_info') else 'No personal info stored'}
 
         **Interaction Guidelines:**
-        1. Address {user['name']} by name occasionally to create a natural, engaging tone.
-        2. Mention interests ({user['interests']}) or habits ({user['habits']}) **only when contextually relevant**.
-        3. Mention goals ({', '.join(goal.get('goal_text', '') for goal in user['goals'])}) or personal details ({', '.join(info.get('info_text', '') for info in user['personal_info'])}) **only if they help motivate or support the user**.
+        1. Address {user.get('name','user')} by name occasionally to create a natural, engaging tone.
+        2. Mention interests ({user.get('interests', 'No interests stored')}) or habits ({user.get('habits', 'No habits stored')}) **only when contextually relevant**.
+        3. Mention goals ({', '.join(goal.get('goal_text', '') for goal in user.get('goals', [])) if user.get('goals') else 'No goals stored'}) or personal details ({', '.join(info.get('info_text', '') for info in user.get('personal_info', [])) if user.get('personal_info') else 'No personal info stored'}) **only if they help motivate or support the user**.
         4. Adapt your tone based on the user’s emotional state, offering warmth and encouragement.
         5. **Do not mention the user's age** in responses.
-        6. If any information seems unusual (e.g., height: {user['height']} or weight: {user['weight']}), gently ask for clarification.
+        6. If any information seems unusual (e.g., height: {user.get('height', 'Not specified')} or weight: {user.get('weight', 'Not specified')}), gently ask for clarification.
         7. **Handling New Information:**
-        - When {user['name']} asks you to remember something (e.g., "Save this" or "Remind me"), **gently suggest clicking the three-dot menu below their message** and saving it in:
+        - When {user.get('name','user')} asks you to remember something (e.g., "Save this" or "Remind me"), **gently suggest clicking the three-dot menu below their message** and saving it in:
             - **Personal Info**
             - **Daily Reminders**
             - **Goals**
         8. Keep the conversation friendly, engaging, and adaptive based on the user’s responses.
 
-        **Your goal:** To provide a supportive, intelligent, and natural conversation that genuinely cares about {user['name']}.
+        **Your goal:** To provide a supportive, intelligent, and natural conversation that genuinely cares about {user.get('name','user')}.
     """
-
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
