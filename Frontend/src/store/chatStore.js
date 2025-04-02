@@ -6,6 +6,7 @@ const useChatStore = create(
   persist((set, get) => ({
   messages: [],
   sessions: [],
+  history:[],
   session_history:[],
   activeSession: null,
   isThinking: false,
@@ -22,8 +23,7 @@ const useChatStore = create(
       const response = await sendMessageApi(message, sessionId);
       console.log("chat store response : ",response)
 
-      const { session } = response; // Extract session info
-      const { _id: session_id, _title: session_title } = session;
+      const { _id: session_id, _title: session_title } = response;
       
       // Append user and AI messages in the correct format
       set((state) => ({
@@ -33,7 +33,7 @@ const useChatStore = create(
           { role: "AI", message: response.message }
         ],
       }));
-      // console.log("messages chatstore: ",messages)
+
 
       // ✅ Store only session_id & session_title
       set((state) => ({
@@ -43,15 +43,14 @@ const useChatStore = create(
       }));
       
 
-      // Optionally fetch updated history to sync with backend
-      const historyResponse = await fetchSessionHistoryApi(sessionId);
-      console.log("history response : ",historyResponse)
-      const formattedMessages = historyResponse.map((msg) => ({
-        role: msg.role,
-        message: msg.message
-      }));
-      console.log("formatted msg : ",formattedMessages)
-      set({ messages: formattedMessages });
+      // // Optionally fetch updated history to sync with backend
+      // const historyResponse = await fetchSessionHistoryApi(sessionId);
+      // // console.log("history response : ",historyResponse)
+      // const formattedMessages = historyResponse.history.map((msg) => ({
+      //   role: msg.role,
+      //   message: msg.content
+      // }));
+      // set({ messages: formattedMessages });
       return response;
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -72,7 +71,7 @@ const useChatStore = create(
   fetchSessions: async () => {
     try {
       const response = await fetchSessionsApi();
-      console.log("Sessions fetched:", response);
+      // console.log("Sessions fetched:", response);
       let sessions = response.sessions || [];
   
       // If no sessions exist, call the start_intro API
@@ -120,14 +119,9 @@ const useChatStore = create(
     try {
       const historyData = await fetchSessionHistoryApi(session_id);
       const { history, title } = historyData;
-      console.log("Fetched history for session:", session_id, history);
-      // Ensure only valid data is stored
-      const formattedHistory = history.map(msg => ({
-        role: msg.role,
-        message: msg.message
-      }));
+      set({ history: history || [] });
+      return history || [];
   
-      set({ messages: formattedHistory, activeSession: session_id });
       set({
         sessions: get().sessions.map(s =>
           s.session_id === session_id ? { ...s, session_title: title } : s
