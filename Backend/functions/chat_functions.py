@@ -97,15 +97,12 @@ def generate_ai_response(user_input: str, session_id: str, user_id, create_sessi
 def extract_name(user_input):
     # Common patterns like "I am Upendra", "My name is Upendra", "I'm Upendra"
     patterns = [
-        r"\bmy name is ([A-Za-z]+)\b",
-        r"\bi am ([A-Za-z]+)\b",
-        r"\bi'm ([A-Za-z]+)\b",
-        r"\bthis is ([A-Za-z]+)\b",
-        r"\b([A-Za-z]+)\b"
+        r"\b(?:my name is|i am|i'm|this is) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)\b",  # Matches "I am Upendra"
+        r"^\b([A-Z][a-z]+(?: [A-Z][a-z]+)?)\b$"  # Matches single-word names like "Upendra"
     ]
 
     for pattern in patterns:
-        match = re.search(pattern, user_input, re.IGNORECASE)
+        match = re.search(pattern, user_input.strip(), re.IGNORECASE)
         if match:
             return match.group(1).capitalize()  # Extracted name
     
@@ -114,10 +111,14 @@ def extract_name(user_input):
 def extract_user_info(user_input, field):
     """Extracts specific user information based on the expected field."""
     user_input = user_input.lower()
-
+    print("\n1")
+    print("\n user_input :",user_input)
     if field == "name":
-        return extract_name(user_input)  # Assuming you already have a function for extracting names
-
+        print("\n inside if name")
+        print("\n user_input :",user_input)
+        name=extract_name(user_input)
+        print("\n name :",name)
+        return  name # Assuming you already have a function for extracting names
     elif field == "sex":
         if "male" in user_input:
             return "Male"
@@ -151,7 +152,7 @@ def extract_user_info(user_input, field):
 
     elif field == "interests":
         return user_input  # Store hobbies/interests as-is
-
+    print("\n2")
     return None  # If nothing extracted
 
 def extract_keywords(text):

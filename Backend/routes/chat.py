@@ -111,7 +111,9 @@ def start_intro():
     new_session = {
         "session_id": session_id,
         "title": "Introduction Session",
-        "messages": [],
+        "messages": [
+            {"role": "AI", "content": "Hey there! 😊 I'm AIRA. I'd love to get to know you better. What's your name?", "created_at": formatted_time_ist}
+        ],
         "created_at": current_time_utc,  # Store the UTC timestamp for consistency
         "last_active": current_time_utc,  # Store the UTC timestamp for consistency
         "created_at_ist": formatted_time_ist  # Store the IST formatted date-time
@@ -178,8 +180,9 @@ def chat():
 
     if session["title"] == "Introduction Session":
         user_data = brain_collection.find_one({"user_id": user_id_obj}) or {}
+        # print("\n session",session)
         current_field = session.get("current_field")
-
+        # print("\n current field from route",current_field)
         if current_field is None:
             for field in brain_fields:
                 if field not in user_data:
@@ -195,7 +198,9 @@ def chat():
             if not user_input:
                 ai_response = question
             else:
+                # print("\n user_input from chat route:",user_input)
                 extracted_value = extract_user_info(user_input, current_field)
+                # print("\n\nextracted value : ",extracted_value)
                 if extracted_value:
                     brain_collection.update_one(
                         {"user_id": user_id_obj},
@@ -212,7 +217,7 @@ def chat():
                         ai_response = f"Got it! {questions[brain_fields.index(next_field)]}"
                         session["current_field"] = next_field
                     else:
-                        ai_response = "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you! For further conversation start a new session."
+                        ai_response = "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!"
                         session["current_field"] = None
                 else:
                     ai_response = f"I didn't quite get that. {question}"
@@ -314,7 +319,7 @@ def get_sessions():
         return jsonify({"sessions": []}), 200
 
     formatted_sessions = [
-        {"session_id": session["session_id"], "session_title": session["title"]}
+        {"session_id": session["session_id"], "session_title": session["title"], "created_at":session["created_at_ist"]}
         for session in sorted(user_doc["sessions"], key=lambda x: x["last_active"], reverse=True)
     ]
     return jsonify({"sessions": formatted_sessions}), 200
