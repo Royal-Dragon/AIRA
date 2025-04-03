@@ -110,7 +110,7 @@ def start_intro():
     
     new_session = {
         "session_id": session_id,
-        "title": "New Session",
+        "title": "Introduction Session",
         "messages": [],
         "created_at": current_time_utc,  # Store the UTC timestamp for consistency
         "last_active": current_time_utc,  # Store the UTC timestamp for consistency
