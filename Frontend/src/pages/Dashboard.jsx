@@ -8,6 +8,7 @@ import InputField from "../components/InputField";
 import ShareIcon from "../assets/share.svg";
 import useAuthStore from "../store/authStore";
 import ReactLoading from 'react-loading';
+
 const Dashboard = () => {
   const {
     activeSession,
@@ -19,7 +20,6 @@ const Dashboard = () => {
     addSession,
     fetchSessionHistory,
   } = useChatStore();
-
 
   const ThinkingAnimation = ({ isThinking }) => (
     isThinking && (
@@ -37,16 +37,19 @@ const Dashboard = () => {
   // Track if the current session is closed
   const [isSessionClosed, setIsSessionClosed] = useState(false);
   
-  // Listen for history changes to detect the special message
+  // Check if the session is closed whenever history changes
   useEffect(() => {
     if (history && history.length > 0) {
       const lastAIMessage = [...history].filter(msg => msg.role === "AI").pop();
-      if (lastAIMessage && lastAIMessage.content === "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!") {
-        setIsSessionClosed(true);
-      }
+      const isClosed = lastAIMessage && 
+        lastAIMessage.content.includes("Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!");
+      setIsSessionClosed(isClosed);
+    } else {
+      setIsSessionClosed(false);
     }
   }, [history]);
 
+  // Load sessions on mount
   useEffect(() => {
     const loadSessions = async () => {
       try {
@@ -58,6 +61,7 @@ const Dashboard = () => {
     loadSessions();
   }, [fetchSessions]);
 
+  // Fetch session history when activeSession changes
   useEffect(() => {
     if (activeSession) {
       fetchSessionHistory(activeSession);
@@ -68,10 +72,7 @@ const Dashboard = () => {
     try {
       const response = await createNewSessionApi();
       const { session_id, session_title } = response;
-      
-      // Reset session closed state when creating a new session
-      setIsSessionClosed(false);
-      
+      setIsSessionClosed(false); // Reset closed state for new session
       setActiveSession(session_id);
       addSession({ session_id, session_title });
       await fetchSessions();
@@ -83,19 +84,9 @@ const Dashboard = () => {
 
   const handleSelectSession = async (sessionId) => {
     setActiveSession(sessionId);
-    await fetchSessionHistory(sessionId);
+    const his=await fetchSessionHistory(sessionId); // This will trigger the history useEffect
+    console.log(his);
     
-    // Check if this session is closed based on its last message
-    const sessionHistory = await fetchSessionHistory(sessionId);
-    if (sessionHistory && sessionHistory.length > 0) {
-      const lastAIMessage = [...sessionHistory].filter(msg => msg.role === "AI").pop();
-      setIsSessionClosed(
-        lastAIMessage && 
-        lastAIMessage.content === "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!"
-      );
-    } else {
-      setIsSessionClosed(false);
-    }
   };
   
   const handleSendMessage = async (message) => {
@@ -111,7 +102,6 @@ const Dashboard = () => {
     navigate("/login", { replace: true });
   };
 
-  // Determine if we should show the welcome screen
   const showWelcomeScreen = history.length === 0;
 
   return (
@@ -124,16 +114,15 @@ const Dashboard = () => {
         handleLogout={handleLogout}
       />
       
-      <div className="w-3/4 flex flex-col p-4 border-l-2 border-[#606567]">
-        <div className="text-3xl font-bold flex flex-row-reverse text-white border-[#606567] pb-2">
-          <button className="flex items-center bg-linear-to-r -mt-2 from-cyan-500 to-blue-500 rounded-xl px-2 pr-3 py-1.5">
-            <img src={ShareIcon} alt="Share" className="w-5 h-5 mx-2 mt-1" /> 
-            <span className="text-xl -mt-1 font-medium">share</span> 
+      <div className="w-full flex flex-col p-4 border-l-2 border-[#606567]">
+        <div className="text-3xl font-bold flex flex-row-reverse text-white border-[#606567] pb-2 border-b-2">
+          <button className="flex items-center bg-[#536af5] hover:bg-[#4965ce] cursor-pointer -mt-2 rounded-xl px-2 pr-3 py-1.5">
+            <img src={ShareIcon} alt="Share" className="w-4 h-4 mx-2" /> 
+            <span className="text-lg -mt-1 font-medium">Share</span> 
           </button>
         </div>
         
         {showWelcomeScreen ? (
-          // Welcome screen layout - centered content
           <div className="flex-1 flex flex-col justify-center items-center">
             <h1 className="text-white text-center font-semibold text-7xl mb-12">
               Welcome {user?.username}
@@ -150,12 +139,11 @@ const Dashboard = () => {
             )}
           </div>
         ) : (
-          // Regular chat layout
           <>
             <ChatWindow messages={history} isThinking={isThinking} />
             
             {!isSessionClosed ? (
-              <div className="w-3/4 ml-56   max-w-2xl">
+              <div className="w-3/4 ml-56 max-w-2xl">
                 <InputField
                   activeSession={activeSession}
                   isThinking={isThinking}
