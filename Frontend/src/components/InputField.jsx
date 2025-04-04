@@ -19,7 +19,7 @@ const InputField = ({ activeSession, isThinking, onSendMessage }) => {
       <input
         type="text"
         className="flex-1 p-3 bg-[#2D3137] text-white rounded-lg shadow-inner "
-        placeholder="Message Aira 👋"
+        placeholder="Chat with Aira ☺️"
         value={inputMessage}
         onChange={(e) => setInputMessage(e.target.value)}
         onKeyDown={(e) => {

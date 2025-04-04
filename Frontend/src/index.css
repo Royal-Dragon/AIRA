@@ -5,14 +5,30 @@
   to { opacity: 1; }
 }
 input::placeholder {
-  color:#ffffff; /* Change this to your desired color */
+  color:#818181; /* Change this to your desired color */
   opacity: 1; /* Ensures consistent appearance across browsers */
 }
 input:focus {
   outline: none;
   border:none;
 }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out;
+}
 
 .animate-fade-in {
   animation: fade-in 1s ease-in-out;

@@ -84,10 +84,10 @@ const ChatWindow = ({ messages, isThinking }) => {
                 {isUser ? (
                   String(msg.content)
                 ) : (
-                  <ReactMarkdown>{displayedContent}</ReactMarkdown>
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
                 )}
               </div>
-              {msg.role === "AI" && typingStates[index] === msg.content && (
+              {msg.role === "AI" &&  (
                 <FeedbackButtons
                   responseId={msg.response_id || Date.now().toString()}
                   responseText={msg.content}

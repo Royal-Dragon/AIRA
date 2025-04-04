@@ -89,7 +89,7 @@ const SessionsSidebar = ({
                 .map((session, index) => (
                   <div
                     key={session.session_id}
-                    className={`p-2 mb-2 cursor-pointer rounded ${
+                    className={`p-2 mb-2 cursor-pointer rounded-2xl ${
                       activeSession === session.session_id
                         ? "bg-[#4965ce]"
                         : "hover:bg-gray-600"
@@ -112,21 +112,8 @@ const SessionsSidebar = ({
 
       {/* Bottom Buttons (Settings & Logout - Always Visible) */}
       <div className="mt-auto">
-        <button
-          className="flex justify-center cursor-pointer text-lg bg-[#536af5] hover:bg-[#4965ce] p-2 mb-2 rounded-2xl w-full"
-          onClick={performLogout}
-        >
-          {isClosed ? (
-            <i className="fa-solid fa-gear"></i>
-          ) : (
-            <>
-              <i className="fa-solid fa-gear mt-1 mr-2"></i>
-              <span>Settings</span>
-            </>
-          )}
-        </button>
-        <button
-          className="flex justify-center cursor-pointer text-lg bg-[#536af5] hover:bg-[#4965ce] p-2 rounded-2xl w-full"
+      <button
+          className="flex justify-center cursor-pointer text-lg bg-[#536af5] hover:bg-[#4965ce] mb-4  p-2 rounded-2xl w-full"
           onClick={performLogout}
         >
           {isClosed ? (
@@ -138,6 +125,21 @@ const SessionsSidebar = ({
             </>
           )}
         </button>
+
+        <button
+          className="flex justify-center cursor-pointer text-lg bg-[#536af5] hover:bg-[#4965ce] p-2 rounded-2xl w-full"
+          onClick={performLogout}
+        >
+          {isClosed ? (
+            <i className="fa-solid fa-gear"></i>
+          ) : (
+            <>
+              <i className="fa-solid fa-gear mt-1 mr-2"></i>
+              <span>Settings</span>
+            </>
+          )}
+        </button>
+
       </div>
     </div>
   );
