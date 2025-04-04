@@ -13,7 +13,7 @@ SESSION_EXPIRY_MINUTES = 10  # Expire sessions after 10 minutes
 
 @assessment_bp.route("/start", methods=["POST"])
 def start_assessment():
-    """Start the assessment and ask the first question."""
+    """Start the assessment with a broad screening question."""
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Missing or invalid token"}), 401
@@ -30,33 +30,37 @@ def start_assessment():
 
     # Verify user exists in brain_collection
     try:
-        # Convert user_id to ObjectId for lookup
         user_obj_id = ObjectId(user_id)
         user_doc = brain_collection.find_one({"user_id": user_obj_id})
-        
         if not user_doc:
             return jsonify({"error": "User profile not found. Please create a profile first."}), 404
     except Exception as e:
         print(f"Error checking user document: {e}")
         return jsonify({"error": "Database error while checking user document."}), 500
 
-    # Fetch all available categories from the database
-    try:
-        categories = question_collection.distinct("category")
-    except Exception as e:
-        print(f"Error fetching distinct categories: {e}")
-        return jsonify({"error": "Error fetching categories from the database."}), 500
-
     # Initialize user assessment session
-    ongoing_assessments[user_id] = {"category": None, "question_ids": [], "answers": [], "timestamp": datetime.datetime.utcnow()}
+    ongoing_assessments[user_id] = {
+        "current_category": None,
+        "potential_categories": [],
+        "question_ids": [],
+        "answers": [],
+        "timestamp": datetime.datetime.utcnow()
+    }
 
-    # Return categories as options for the first question
-    first_question = "Which area would you like to assess today?"
+    # First screening question to identify potential areas
+    first_question = "Over the past two weeks, how often have you been bothered by any of the following problems?"
+    screening_questions = [
+        "Feeling down, depressed, or hopeless",
+        "Little interest or pleasure in doing things",
+        "Feeling nervous, anxious, or on edge",
+        "Not being able to stop or control worrying"
+    ]
     
     return jsonify({
         "question": first_question,
-        "options": categories,
-        "info": "Please select one of the options above to begin your assessment."
+        "options": screening_questions,
+        "info": "Please select all that apply to you (comma-separated numbers, e.g. '0,2')",
+        "is_screening": True
     }), 200
 
 @assessment_bp.route("/next", methods=["POST"])
@@ -84,135 +88,138 @@ def next_question():
 
     user_data = ongoing_assessments[user_id]
 
-    if user_data["category"] is None:
+    # Handle screening phase (first question)
+    if not user_data["potential_categories"] and "is_screening" in data:
         try:
-            # Get all categories
-            categories = question_collection.distinct("category")
+            # Parse selected options (comma-separated numbers)
+            selected_indices = [int(idx.strip()) for idx in answer.split(",") if idx.strip().isdigit()]
             
-            # Check if answer is a valid index for the categories list
-            try:
-                category_index = int(answer)
-                if not (0 <= category_index < len(categories)):
-                    return jsonify({"error": f"Invalid option. Please select a number between 0 and {len(categories)-1}."}), 400
-                
-                selected_category = categories[category_index]
-            except ValueError:
-                # If not an index, try direct matching (for backward compatibility)
-                answer_lower = answer.lower()
-                categories_lower = [cat.lower() for cat in categories]
-                
-                if answer_lower in categories_lower:
-                    selected_category = categories[categories_lower.index(answer_lower)]
-                else:
-                    return jsonify({"error": f"Invalid category. Please select a valid option."}), 400
+            # Map selections to categories
+            category_mapping = {
+                0: "Depression",
+                1: "Depression",
+                2: "Anxiety",
+                3: "Anxiety"
+            }
             
-            # Set the selected category
-            user_data["category"] = selected_category
-            user_data["question_ids"] = []
-            user_data["answers"] = []
-            user_data["timestamp"] = datetime.datetime.utcnow()
-
-            # Get the first question for the selected category
-            first_question_doc = question_collection.find_one({"category": selected_category})
-            if not first_question_doc:
-                return jsonify({"error": "No questions found for this category in the database."}), 500
-
-            user_data["question_ids"].append(first_question_doc["_id"])
-            return jsonify({"question": first_question_doc["question_text"], "options": first_question_doc.get("options")}), 200
+            # Get unique categories from selections
+            selected_categories = list({category_mapping[idx] for idx in selected_indices if idx in category_mapping})
+            
+            if not selected_categories:
+                return jsonify({"error": "No valid categories selected. Please try again."}), 400
+                
+            user_data["potential_categories"] = selected_categories
+            user_data["current_category"] = selected_categories[0]  # Start with first category
+            
+            # Get first question for the selected category
+            first_question = question_collection.find_one({"category": user_data["current_category"]})
+            if not first_question:
+                return jsonify({"error": "No questions found for this category."}), 404
+                
+            user_data["question_ids"].append(first_question["_id"])
+            return jsonify({
+                "question": first_question["question_text"],
+                "options": first_question.get("options", []),
+                "current_category": user_data["current_category"],
+                "remaining_categories": user_data["potential_categories"][1:]
+            }), 200
             
         except Exception as e:
-            print(f"Error processing category selection: {e}")
-            return jsonify({"error": "Error processing category selection."}), 500
+            print(f"Error processing screening response: {e}")
+            return jsonify({"error": "Invalid screening response format."}), 400
 
+    # Handle regular question answers
     try:
-        score = int(answer)
+        # Validate answer is within options range
         last_question_id = user_data["question_ids"][-1]
         last_question = question_collection.find_one({"_id": last_question_id})
-
+        
         if not last_question or 'options' not in last_question:
             return jsonify({"error": "Invalid question or options not found."}), 500
 
-        if not (0 <= score < len(last_question['options'])):
-            return jsonify({"error": "Response must be a valid option index."}), 400
+        try:
+            answer_index = int(answer)
+            if not (0 <= answer_index < len(last_question['options'])):
+                return jsonify({"error": f"Invalid option index. Please select between 0-{len(last_question['options'])-1}."}), 400
+        except ValueError:
+            return jsonify({"error": "Invalid answer format. Please provide the option index as a number."}), 400
 
-        user_data["answers"].append(score)
+        # Store answer
+        user_data["answers"].append(answer_index)
         user_data["timestamp"] = datetime.datetime.utcnow()
 
-    except ValueError:
-        return jsonify({"error": "Invalid response format. Answer should be the index of your choice (0-n)."}), 400
+    except Exception as e:
+        print(f"Error processing answer: {e}")
+        return jsonify({"error": "Error processing your answer."}), 500
 
-    category = user_data["category"]
-    asked_question_ids = user_data["question_ids"]
+    # Get next question in current category
+    next_question_doc = question_collection.find_one({
+        "category": user_data["current_category"],
+        "_id": {"$nin": user_data["question_ids"]}
+    })
 
-    next_question_doc = question_collection.find_one({"category": category, "_id": {"$nin": asked_question_ids}})
-    if not next_question_doc:
-        # Assessment completed, calculate and store results
-        score, level = calculate_score(user_data["answers"], user_data["question_ids"])
-
-        # Prepare assessment result for storage
-        assessment = {
-            "category": user_data["category"],
-            "mental_score": score,
-            "level": level,
-            "timestamp": datetime.datetime.utcnow().isoformat()
-        }
-
-        # Look up the user by user_id field, not _id
-        try:
-            user_obj_id = ObjectId(user_id)
+    if next_question_doc:
+        user_data["question_ids"].append(next_question_doc["_id"])
+        return jsonify({
+            "question": next_question_doc["question_text"],
+            "options": next_question_doc.get("options", []),
+            "current_category": user_data["current_category"],
+            "remaining_categories": user_data["potential_categories"][1:]
+        }), 200
+    else:
+        # Current category completed - check if more categories to assess
+        if len(user_data["potential_categories"]) > 1:
+            # Move to next category
+            user_data["potential_categories"].pop(0)
+            user_data["current_category"] = user_data["potential_categories"][0]
+            user_data["question_ids"] = []  # Reset for new category
             
-            # First, check if the assessments field exists
-            user_doc = brain_collection.find_one({"user_id": user_obj_id})
-            
-            if not user_doc:
-                return jsonify({"error": "User profile not found. Please create a profile first."}), 404
+            first_question = question_collection.find_one({"category": user_data["current_category"]})
+            if not first_question:
+                return jsonify({"error": "No questions found for next category."}), 404
                 
-            # Update strategy depends on whether assessments field exists
-            if "assessments" in user_doc:
-                # Assessments field exists, use $push
+            user_data["question_ids"].append(first_question["_id"])
+            return jsonify({
+                "question": first_question["question_text"],
+                "options": first_question.get("options", []),
+                "current_category": user_data["current_category"],
+                "remaining_categories": user_data["potential_categories"][1:]
+            }), 200
+        else:
+            # All categories completed - calculate scores
+            try:
+                score, level = calculate_score(user_data["answers"], user_data["question_ids"])
+                
+                assessment = {
+                    "categories_assessed": user_data["potential_categories"],
+                    "mental_score": score,
+                    "level": level,
+                    "answers": user_data["answers"],
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                }
+
+                user_obj_id = ObjectId(user_id)
                 update_result = brain_collection.update_one(
                     {"user_id": user_obj_id},
-                    {"$push": {"assessments": assessment}}
-                )
-            else:
-                # Assessments field doesn't exist, use $set with new array
-                update_result = brain_collection.update_one(
-                    {"user_id": user_obj_id},
-                    {"$set": {"assessments": [assessment]}}
+                    {"$push": {"assessments": assessment}},
+                    upsert=True
                 )
                 
-            if update_result.matched_count == 0:
-                return jsonify({"error": "Failed to update user document."}), 500
+                if update_result.matched_count == 0 and not update_result.upserted_id:
+                    return jsonify({"error": "Failed to store assessment results."}), 500
+                    
+                # Prepare detailed response
+                result = {
+                    "user_id": str(user_obj_id),
+                    "categories": user_data["potential_categories"],
+                    "score": score,
+                    "level": level,
+                    "timestamp": assessment["timestamp"]
+                }
+
+                del ongoing_assessments[user_id]
+                return jsonify(result), 200
                 
-        except Exception as e:
-            print(f"Error storing assessment result: {e}")
-            return jsonify({"error": f"An error occurred while storing the assessment result: {str(e)}"}), 500
-
-        # Prepare result for response
-        result = {
-            "user_id": str(user_obj_id),
-            "category": user_data["category"],
-            "mental_score": score,
-            "level": level,
-            "timestamp": assessment["timestamp"]
-        }
-
-        # Remove session after completion
-        del ongoing_assessments[user_id]
-
-        return jsonify(result), 200
-
-    user_data["question_ids"].append(next_question_doc["_id"])
-    return jsonify({"question": next_question_doc["question_text"], "options": next_question_doc.get("options")}), 200
-
-# @assessment_bp.route("/categories", methods=["GET"])
-# def get_categories():
-#     """Get all available assessment categories."""
-#     try:
-#         if question_collection is None:
-#             return jsonify({"error": "Database connection error: question_collection is not initialized."}), 500
-#         valid_categories = question_collection.distinct("category")
-#         return jsonify({"categories": valid_categories, "count": len(valid_categories)}), 200
-#     except Exception as e:
-#         print(f"Error fetching distinct categories: {e}")
-#         return jsonify({"error": "Error fetching categories from the database."}), 500
+            except Exception as e:
+                print(f"Error calculating/storing results: {e}")
+                return jsonify({"error": "Error processing assessment results."}), 500
