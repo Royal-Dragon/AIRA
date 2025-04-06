@@ -93,24 +93,26 @@ const SessionsSidebar = ({
 
           <div className="flex-1 flex-col pt-1 sm:pt-3 overflow-y-auto no-scrollbar overflow-hidden">
             {sessions.length > 0 ? (
-              sessions.slice().map((session, index) => (
-                <div
-                  key={session.session_id}
-                  className={`p-1 sm:p-2 mb-1 sm:mb-2 cursor-pointer rounded-xl sm:rounded-2xl text-sm sm:text-base
-                    ${
-                      activeSession === session.session_id
-                        ? "bg-[#E7CCC5] border border-[#555453]"
-                        : "hover:bg-[#ffa58d] hover:border border-[#555453]"
-                    }`}
-                  onClick={() => onSelectSession(session.session_id)}
-                >
-                  {index === 0 ? (
-                    <p>{session.session_title || "Session"}</p>
-                  ) : (
-                    session.session_title || "Session"
-                  )}
-                </div>
-              ))
+              sessions.slice().map((session, index) => {
+                const truncatedTitle = session.session_title
+                  ? session.session_title.split(" ").slice(0, 3).join(" ") + (session.session_title.split(" ").length > 4 ? "..." : "")
+                  : "Session";
+
+                return (
+                  <div
+                    key={session.session_id}
+                    className={`p-1 sm:p-2 mb-1 sm:mb-2 cursor-pointer rounded-xl sm:rounded-2xl text-sm sm:text-base
+                      ${
+                        activeSession === session.session_id
+                          ? "bg-[#E7CCC5] border border-[#555453]"
+                          : "hover:bg-[#ffa58d] hover:border border-[#555453]"
+                      }`}
+                    onClick={() => onSelectSession(session.session_id)}
+                  >
+                    {truncatedTitle}
+                  </div>
+                );
+              })
             ) : (
               <p className="text-gray-400 text-sm sm:text-base">No sessions available</p>
             )}

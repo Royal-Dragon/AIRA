@@ -5,12 +5,13 @@ import { createNewSessionApi } from "../api/chat";
 import SessionsSidebar from "../components/SessionsSidebar";
 import ChatWindow from "../components/ChatWindow";
 import InputField from "../components/InputField";
-import ShareIcon from "../assets/share.svg";
 import useAuthStore from "../store/authStore";
 import ReactLoading from 'react-loading';
 import { faL } from "@fortawesome/free-solid-svg-icons";
 import Background from "../source/bg.png"
 import { motion } from "framer-motion";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faShare } from "@fortawesome/free-solid-svg-icons";
 
 const Dashboard = () => {
   const {
@@ -210,7 +211,7 @@ const Dashboard = () => {
           />
           <div className="text-3xl font-bold flex flex-row-reverse text-[#555453] border-[#555453] pb-2 border-b-2 z-1">
             <button className="flex items-center bg-[#E7CCC5] hover:bg-[#ECB5A6] border-[#555453] cursor-pointer -mt-2 rounded-xl px-2 pr-3 py-1.5">
-              <img src={ShareIcon} alt="Share" className="w-4 h-4 mx-2" />
+              <FontAwesomeIcon icon={faShare} className="w-4 h-4 mx-2" />
               <span className="text-lg -mt-1 font-medium">Share</span>
             </button>
           </div>

@@ -76,6 +76,14 @@ const ChatWindow = ({ messages, isThinking }) => {
             ? msg.content 
             : typingStates[index] || '';
 
+          // Extract hour and minutes from the timestamp
+          const formattedTime = msg.created_at
+            ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '';
+
+          // Determine if the message is small or large
+          const isSmallMessage = displayedContent.length <= 30;
+
           return (
             <motion.div
               key={index}
@@ -92,8 +100,19 @@ const ChatWindow = ({ messages, isThinking }) => {
               </div>
               {msg.role === "AI" ? (
                 <div className="flex flex-col items-start">
-                  <div className="chat-bubble bg-[#E6CCC5] text-[#555453]">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <div
+                    className={`chat-bubble bg-[#E6CCC5] text-[#555453] relative ${
+                      isSmallMessage ? "flex justify-between items-center" : "flex flex-col"
+                    }`}
+                  >
+                    <span>{msg.content}</span>
+                    <span
+                      className={`text-xs opacity-50 text-black ${
+                        isSmallMessage ? "ml-2" : "mt-2 self-end"
+                      }`}
+                    >
+                      {formattedTime}
+                    </span>
                   </div>
                   <div className="mt-2">
                     <FeedbackButtons
@@ -103,8 +122,18 @@ const ChatWindow = ({ messages, isThinking }) => {
                   </div>
                 </div>
               ) : (
-                <div className="chat-bubble bg-[#E6CCC5] text-[#555453]">
-                  {String(msg.content)}
+                <div className="flex flex-col items-end">
+                  <div
+                    className={"chat-bubble bg-[#E6CCC5] text-[#555453]  flex flex-col"
+                    }
+                  >
+                    <span>{displayedContent}</span>
+                    <span
+                      className={"text-xs opacity-50 text-black mt-2 self-end"}
+                    >
+                      {formattedTime}
+                    </span>
+                  </div>
                 </div>
               )}
               <div className="chat-footer opacity-50">
