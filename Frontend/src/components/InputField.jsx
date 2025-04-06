@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import SendIcon from '../assets/send.svg'
+import { motion } from "framer-motion";
 
 const InputField = ({ activeSession, isThinking, onSendMessage }) => {
   const [inputMessage, setInputMessage] = useState("");
@@ -15,10 +16,15 @@ const InputField = ({ activeSession, isThinking, onSendMessage }) => {
   };
 
   return (
-    <div className="mt-4 flex p-1 bg-[#2D3137] rounded-xl ">
+    <motion.div
+      className="mt-4 flex flex-col sm:flex-row p-2 bg-[#E7CCC4] border border-[#555453] rounded-xl gap-2 sm:gap-0"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
       <input
         type="text"
-        className="flex-1 p-3 bg-[#2D3137] text-white rounded-lg shadow-inner "
+        className="flex-1 p-3 bg-[#E7CCC4] text-[#555453] rounded-lg sm:rounded-l-lg sm:rounded-r-none outline-none w-full"
         placeholder="Chat with Aira ☺️"
         value={inputMessage}
         onChange={(e) => setInputMessage(e.target.value)}
@@ -27,13 +33,13 @@ const InputField = ({ activeSession, isThinking, onSendMessage }) => {
         }}
       />
       <button
-        className={`bg-[#536af5] hover:bg-[#4965ce] cursor-pointer text-white px-2 my-1 mr-1 flex items-center  rounded-xl disabled:bg-gray-400 disabled:cursor-not-allowed`}
+        className="bg-[#ECB5A6] border border-[#555453] hover:bg-[#ffa58d] text-[#555453] px-4 py-2 rounded-lg flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed"
         onClick={handleSend}
         disabled={isThinking || !activeSession}
       >
-        <img src={SendIcon} alt="Like" className="w-5 h-5 mx-2" />
+        <img src={SendIcon} alt="Send" className="w-5 h-5" />
       </button>
-    </div>
+    </motion.div>
   );
 };
 

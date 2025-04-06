@@ -9,6 +9,8 @@ import ShareIcon from "../assets/share.svg";
 import useAuthStore from "../store/authStore";
 import ReactLoading from 'react-loading';
 import { faL } from "@fortawesome/free-solid-svg-icons";
+import Background from "../source/bg.png"
+import { motion } from "framer-motion";
 
 const Dashboard = () => {
   const {
@@ -65,7 +67,7 @@ const Dashboard = () => {
   useEffect(() => {
     const checkSessions = () => {
       // Show tutorial only if there's 0 or 1 session (assuming 1 might be a default session)
-      const shouldShow = (sessions.length <= 1 && history.length <= 1);
+      const shouldShow = (sessions.length <= 1 && history.length <= 0);
       setShouldShowTutorial(shouldShow);
       setShowDashboard(!shouldShow);
     };
@@ -185,7 +187,12 @@ const Dashboard = () => {
 
 
   return (
-    <div className="bg-amber-600">
+    <motion.div
+      className="bg-amber-600"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       <div className="flex h-screen bg-[#292a2d]">
         <SessionsSidebar
           sessions={sessions}
@@ -195,22 +202,27 @@ const Dashboard = () => {
           handleLogout={handleLogout}
         />
       
-        <div className="w-full flex flex-col p-4 border-l-2 border-[#606567]">
-          <div className="text-3xl font-bold flex flex-row-reverse text-white border-[#606567] pb-2 border-b-2">
-            <button className="flex items-center bg-[#536af5] hover:bg-[#4965ce] cursor-pointer -mt-2 rounded-xl px-2 pr-3 py-1.5">
+        <div className="w-full  flex flex-col p-4 border-l-2 border-[#606567] relative">
+          <img 
+            src={Background} 
+            alt="Background" 
+            className="absolute inset-0 w-full h-full object-cover opacity-[1] z-0" 
+          />
+          <div className="text-3xl font-bold flex flex-row-reverse text-[#555453] border-[#555453] pb-2 border-b-2 z-1">
+            <button className="flex items-center bg-[#E7CCC5] hover:bg-[#ECB5A6] border-[#555453] cursor-pointer -mt-2 rounded-xl px-2 pr-3 py-1.5">
               <img src={ShareIcon} alt="Share" className="w-4 h-4 mx-2" />
               <span className="text-lg -mt-1 font-medium">Share</span>
             </button>
           </div>
       
           {showWelcomeScreen ? (
-            <div className="flex-1 flex flex-col justify-center items-center">
-              <h1 className="text-white text-center font-semibold text-7xl mb-12">
+            <div className="flex-1 flex flex-col justify-center items-center z-1">
+              <h1 className="text-[#555453] text-center font-semibold text-4xl sm:text-5xl md:text-6xl lg:text-7xl mb-6 sm:mb-8 md:mb-12">
                 Welcome {user?.username}
               </h1>
       
               {!isSessionClosed && (
-                <div className="w-3/4 max-w-2xl">
+                <div className="w-3/4  max-w-2xl">
                   <InputField
                     activeSession={activeSession}
                     isThinking={isThinking}
@@ -224,15 +236,17 @@ const Dashboard = () => {
               <ChatWindow messages={history} isThinking={isThinking} />
       
               {!isSessionClosed ? (
-                <div className="w-3/4 ml-56 max-w-2xl">
-                  <InputField
-                    activeSession={activeSession}
-                    isThinking={isThinking}
-                    onSendMessage={handleSendMessage}
-                  />
+                <div className=" flex  justify-center items-center z-1">
+                  <div className="w-3/4  max-w-2xl ">
+                    <InputField
+                      activeSession={activeSession}
+                      isThinking={isThinking}
+                      onSendMessage={handleSendMessage}
+                    />
+                  </div>
                 </div>
               ) : (
-                <div className="text-center p-4 text-gray-400 border-t border-[#606567] mt-2">
+                <div className="text-center p-4 text-gray-400 border-t border-[#606567] mt-2 z-1">
                   This personalized conversation has been completed. Start a new session to continue chatting.
                 </div>
               )}
@@ -310,46 +324,11 @@ const Dashboard = () => {
               </div>
             </div>
           ))}
-
-          {/* Navigation controls */}
-          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex space-x-4">
-            {/* <button
-              onClick={() => setIsEditingPositions(!isEditingPositions)}
-              className="bg-white text-amber-600 p-2 rounded-full shadow-md"
-              title="Configure positions"
-            >
-              <i className="fas fa-edit"></i>
-            </button> */}
-            <button
-              onClick={() => setOverlayStep(prev => Math.max(1, prev - 1))}
-              disabled={overlayStep === 1}
-              className="bg-white text-amber-600 p-2 rounded-full shadow-md disabled:opacity-50"
-            >
-              <i className="fas fa-chevron-left"></i>
-            </button>
-            <div className="flex items-center space-x-2">
-              {steps.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setOverlayStep(i + 1)}
-                  className={`w-3 h-3 rounded-full ${
-                    overlayStep === i + 1 ? 'bg-amber-600' : 'bg-gray-300'
-                  }`}
-                />
-              ))}
-            </div>
-            <button
-              onClick={() => setOverlayStep(prev => Math.min(steps.length, prev + 1))}
-              disabled={overlayStep === steps.length}
-              className="bg-white text-amber-600 p-2 rounded-full shadow-md disabled:opacity-50"
-            >
-              <i className="fas fa-chevron-right"></i>
-            </button>
-          </div>
+          
         </div>
       )}
 
-  </div>
+  </motion.div>
 );
 };
 
