@@ -3,6 +3,7 @@ import useChatStore from "../store/chatStore";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createNewSessionApi } from "../api/chat";
 import SessionsSidebar from "../components/SessionsSidebar";
+import Aira from "../assets/aira.png";
 import ChatWindow from "../components/ChatWindow";
 import InputField from "../components/InputField";
 import useAuthStore from "../store/authStore";
@@ -209,7 +210,20 @@ const Dashboard = () => {
             alt="Background" 
             className="absolute inset-0 w-full h-full object-cover opacity-[1] z-0" 
           />
-          <div className="text-3xl font-bold flex flex-row-reverse text-[#555453] border-[#555453] pb-2 border-b-2 z-1">
+          <div className="text-3xl font-bold flex justify-between items-center text-[#555453] border-[#555453] pb-2 border-b-2 mb-2 z-1">
+            <div className="flex items-center">
+              <img 
+                src={Aira}
+                alt="Aira Logo" 
+                className="w-12 h-12 rounded-full scale-125 mr-3"
+              />
+              <div>
+                <h2 className="text-3xl font-bold">Aira</h2>
+                <div className="flex items-center ">
+                  <div className="bg-green-500 mt-1 mr-1 h-2 w-2 rounded-4xl "></div><p className="text-sm text-">online</p>
+                </div>
+              </div>
+            </div>
             <button className="flex items-center bg-[#E7CCC5] hover:bg-[#ECB5A6] border-[#555453] cursor-pointer -mt-2 rounded-xl px-2 pr-3 py-1.5">
               <FontAwesomeIcon icon={faShare} className="w-4 h-4 mx-2" />
               <span className="text-lg -mt-1 font-medium">Share</span>
