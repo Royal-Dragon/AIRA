@@ -230,20 +230,26 @@ def add_reminder():
         if not all([user_id, title, scheduled_time]):
             return jsonify({"error": "Missing required fields (user_id, title, scheduled_time)"}), 400
 
-        # Parse the incoming IST time and localize it to IST
+        # Parse the incoming IST time WITHOUT localizing it first
         try:
-            ist_datetime = ist_tz.localize(datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S"))
+            # Parse as naive datetime
+            naive_datetime = datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S")
+            # Explicitly set as IST
+            ist_datetime = ist_tz.localize(naive_datetime)
+            # Store the UTC equivalent for MongoDB (which stores in UTC)
+            utc_datetime = ist_datetime.astimezone(pytz.UTC)
         except ValueError as e:
             logger.error(f"Invalid scheduled_time format: {str(e)}")
             return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
 
-        # Create new reminder object, storing scheduled_time in IST
+        # Create new reminder object, storing scheduled_time in UTC for MongoDB
         new_reminder = {
             "_id": ObjectId(),
             "title": title,
-            "scheduled_time": ist_datetime,  # Store directly in IST
+            "scheduled_time": utc_datetime,  # Store in UTC for MongoDB
+            "time_zone": "Asia/Kolkata",  # Store the time zone reference
             "status": "pending",
-            "created_at": datetime.now(ist_tz)  # Store creation time in IST as well
+            "created_at": datetime.now(pytz.UTC)  # Store creation time in UTC
         }
 
         # Add reminder to user's reminders array
@@ -257,8 +263,11 @@ def add_reminder():
             # Convert back to IST string for response (remove timezone info)
             new_reminder_copy = new_reminder.copy()
             new_reminder_copy["_id"] = str(new_reminder_copy["_id"])
-            new_reminder_copy["scheduled_time"] = format_datetime_for_response(new_reminder_copy["scheduled_time"])
-            new_reminder_copy["created_at"] = format_datetime_for_response(new_reminder_copy["created_at"])
+            # Convert UTC time back to IST for response
+            ist_time = new_reminder_copy["scheduled_time"].astimezone(ist_tz)
+            new_reminder_copy["scheduled_time"] = format_datetime_for_response(ist_time)
+            ist_created_at = new_reminder_copy["created_at"].astimezone(ist_tz)
+            new_reminder_copy["created_at"] = format_datetime_for_response(ist_created_at)
             
             return jsonify({
                 "message": "Reminder added successfully",
@@ -276,7 +285,7 @@ def update_reminder():
     """
     Update an existing reminder
     Expects JSON body with: user_id, reminder_id, title (optional), scheduled_time (optional, in IST)
-    Stores scheduled_time in IST directly
+    Stores scheduled_time in UTC for MongoDB with time zone reference
     """
     try:
         data = request.json
@@ -294,9 +303,12 @@ def update_reminder():
             update_fields["reminders.$.title"] = title
         if scheduled_time:
             try:
-                # Parse and localize IST time (no UTC conversion)
-                ist_datetime = ist_tz.localize(datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S"))
-                update_fields["reminders.$.scheduled_time"] = ist_datetime  # Store in IST
+                # Parse naive datetime, explicitly set as IST, then convert to UTC
+                naive_datetime = datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S")
+                ist_datetime = ist_tz.localize(naive_datetime)
+                utc_datetime = ist_datetime.astimezone(pytz.UTC)
+                update_fields["reminders.$.scheduled_time"] = utc_datetime  # Store in UTC
+                update_fields["reminders.$.time_zone"] = "Asia/Kolkata"  # Store time zone reference
             except ValueError as e:
                 logger.error(f"Invalid scheduled_time format: {str(e)}")
                 return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
@@ -347,3 +359,8 @@ def delete_reminder():
     except Exception as e:
         logger.error(f"Error deleting reminder: {str(e)}")
         return jsonify({"error": "An error occurred while deleting the reminder"}), 500
+
+# Make sure to add this import at the top of your file
+import pytz
+# Define IST timezone
+ist_tz = pytz.timezone('Asia/Kolkata')
