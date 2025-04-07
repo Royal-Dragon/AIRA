@@ -65,7 +65,7 @@ const ChatWindow = ({ messages, isThinking }) => {
   return (
     <div 
       ref={chatContainerRef}
-      className='flex-1 overflow-y-auto p-4 rounded-lg no-scrollbar z-1'
+      className='flex-1 overflow-y-auto p-4 rounded-lg  z-10'
     >
       {messages.length > 0 ? (
         messages.map((msg, index) => {
@@ -74,37 +74,41 @@ const ChatWindow = ({ messages, isThinking }) => {
           const isUser = msg.role === 'User';
           const displayedContent = isUser 
             ? msg.content 
-            : typingStates[index] || '';
+            : typingStates[index] || (isThinking && index === messages.length - 1 ? null : '');
 
-          // Extract hour and minutes from the timestamp
           const formattedTime = msg.created_at
             ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : '';
 
-          // Determine if the message is small or large
           const isSmallMessage = displayedContent.length <= 30;
+
+          // Determine if this is the last message
+          const isLastMessage = index === messages.length - 1;
 
           return (
             <motion.div
               key={index}
               className={`chat ${isUser ? "chat-end" : "chat-start"} mb-4`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
+              initial={isLastMessage ? { opacity: 0, y: 20 } : false}
+              animate={isLastMessage ? { opacity: 1, y: 0 } : false}
+              transition={isLastMessage ? { duration: 0.5 } : {}}
             >
-           
               {msg.role === "AI" ? (
                 <div className="flex flex-col items-start">
                   <div
-                    className={`chat-bubble bg-[#E6CCC5] text-[#555453] relative ${
-                      isSmallMessage ? "flex justify-between items-center " : "flex flex-col"
-                    }`}
+                    className={"chat-bubble bg-[#E6CCC5] text-[#555453] relative flex flex-col"}
                   >
-                    <span>{msg.content}</span>
+                    {isThinking && index === messages.length - 1 ? (
+                      <div className="dot-wave">
+                        <span className="dot"></span>
+                        <span className="dot"></span>
+                        <span className="dot"></span>
+                      </div>
+                    ) : (
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    )}
                     <span
-                      className={`text-xs opacity-50 text-black ${
-                        isSmallMessage ? "ml-2" : "mt-2 self-end"
-                      }`}
+                      className={"text-xs opacity-50 text-black mt-2 self-end"}
                     >
                       {formattedTime}
                     </span>
@@ -140,14 +144,7 @@ const ChatWindow = ({ messages, isThinking }) => {
           Welcome {user.username}
         </h1>
       )}
-      {isThinking && (
-        <div className='text-center'>
-          <p className='text-gray-500 italic'>Typing...</p>
-          <div className='flex justify-center mt-2'>
-            <div className='w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin'></div>
-          </div>
-        </div>
-      )}
+    
     </div>
   );
 };

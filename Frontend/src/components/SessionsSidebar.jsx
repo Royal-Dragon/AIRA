@@ -91,7 +91,7 @@ const SessionsSidebar = ({
             </div>
           </div>
 
-          <div className="flex-1 flex-col pt-1 sm:pt-3 overflow-y-auto no-scrollbar overflow-hidden">
+          <div className="flex-1 flex-col pt-1 sm:pt-3 overflow-y-auto  overflow-hidden">
             {sessions.length > 0 ? (
               sessions.slice().map((session, index) => {
                 const truncatedTitle = session.session_title
