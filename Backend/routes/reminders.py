@@ -213,3 +213,137 @@ def update_reminder_status():
     except Exception as e:
         logger.error(f"Error updating reminder status: {str(e)}")
         return jsonify({"error": "An error occurred while updating the reminder"}), 500
+    
+@reminder_bp.route("/add_reminder", methods=["POST"])
+def add_reminder():
+    """
+    Add a new reminder for a user
+    Expects JSON body with: user_id, title, scheduled_time (in IST)
+    Stores scheduled_time in IST directly
+    """
+    try:
+        data = request.json
+        user_id = data.get("user_id")
+        title = data.get("title")
+        scheduled_time = data.get("scheduled_time")  # Expected in IST format: "YYYY-MM-DD HH:MM:SS"
+
+        if not all([user_id, title, scheduled_time]):
+            return jsonify({"error": "Missing required fields (user_id, title, scheduled_time)"}), 400
+
+        # Parse the incoming IST time and localize it to IST
+        try:
+            ist_datetime = ist_tz.localize(datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S"))
+        except ValueError as e:
+            logger.error(f"Invalid scheduled_time format: {str(e)}")
+            return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
+
+        # Create new reminder object, storing scheduled_time in IST
+        new_reminder = {
+            "_id": ObjectId(),
+            "title": title,
+            "scheduled_time": ist_datetime,  # Store directly in IST
+            "status": "pending",
+            "created_at": datetime.now(ist_tz)  # Store creation time in IST as well
+        }
+
+        # Add reminder to user's reminders array
+        result = reminder_collection.update_one(
+            {"user_id": user_id},
+            {"$push": {"reminders": new_reminder}},
+            upsert=True  # Creates new document if user doesn't exist
+        )
+
+        if result.modified_count > 0 or result.upserted_id:
+            # Convert back to IST string for response (remove timezone info)
+            new_reminder_copy = new_reminder.copy()
+            new_reminder_copy["_id"] = str(new_reminder_copy["_id"])
+            new_reminder_copy["scheduled_time"] = format_datetime_for_response(new_reminder_copy["scheduled_time"])
+            new_reminder_copy["created_at"] = format_datetime_for_response(new_reminder_copy["created_at"])
+            
+            return jsonify({
+                "message": "Reminder added successfully",
+                "reminder": new_reminder_copy
+            }), 201
+        else:
+            return jsonify({"error": "Failed to add reminder"}), 500
+
+    except Exception as e:
+        logger.error(f"Error adding reminder: {str(e)}")
+        return jsonify({"error": "An error occurred while adding the reminder"}), 500
+
+@reminder_bp.route("/update_reminder", methods=["PUT"])
+def update_reminder():
+    """
+    Update an existing reminder
+    Expects JSON body with: user_id, reminder_id, title (optional), scheduled_time (optional, in IST)
+    Stores scheduled_time in IST directly
+    """
+    try:
+        data = request.json
+        user_id = data.get("user_id")
+        reminder_id = data.get("reminder_id")
+        title = data.get("title")
+        scheduled_time = data.get("scheduled_time")  # Expected in IST format: "YYYY-MM-DD HH:MM:SS"
+
+        if not user_id or not reminder_id:
+            return jsonify({"error": "Missing required fields (user_id, reminder_id)"}), 400
+
+        # Prepare update fields
+        update_fields = {}
+        if title:
+            update_fields["reminders.$.title"] = title
+        if scheduled_time:
+            try:
+                # Parse and localize IST time (no UTC conversion)
+                ist_datetime = ist_tz.localize(datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S"))
+                update_fields["reminders.$.scheduled_time"] = ist_datetime  # Store in IST
+            except ValueError as e:
+                logger.error(f"Invalid scheduled_time format: {str(e)}")
+                return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
+
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+
+        # Update the reminder
+        result = reminder_collection.update_one(
+            {"user_id": user_id, "reminders._id": ObjectId(reminder_id)},
+            {"$set": update_fields}
+        )
+
+        if result.modified_count > 0:
+            return jsonify({"message": "Reminder updated successfully"}), 200
+        else:
+            return jsonify({"error": "Reminder not found or no changes made"}), 404
+
+    except Exception as e:
+        logger.error(f"Error updating reminder: {str(e)}")
+        return jsonify({"error": "An error occurred while updating the reminder"}), 500
+
+@reminder_bp.route("/delete_reminder", methods=["DELETE"])
+def delete_reminder():
+    """
+    Delete a specific reminder
+    Expects JSON body with: user_id, reminder_id
+    """
+    try:
+        data = request.json
+        user_id = data.get("user_id")
+        reminder_id = data.get("reminder_id")
+
+        if not user_id or not reminder_id:
+            return jsonify({"error": "Missing required fields (user_id, reminder_id)"}), 400
+
+        # Delete the reminder from the array
+        result = reminder_collection.update_one(
+            {"user_id": user_id},
+            {"$pull": {"reminders": {"_id": ObjectId(reminder_id)}}}
+        )
+
+        if result.modified_count > 0:
+            return jsonify({"message": "Reminder deleted successfully"}), 200
+        else:
+            return jsonify({"error": "Reminder not found"}), 404
+
+    except Exception as e:
+        logger.error(f"Error deleting reminder: {str(e)}")
+        return jsonify({"error": "An error occurred while deleting the reminder"}), 500
