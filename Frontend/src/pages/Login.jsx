@@ -30,7 +30,12 @@ const Login = () => {
         setError(res_error);
       } else {
         login(response.user, response.access_token, response.refresh_token);
-        navigate("/dashboard");
+        if (response.user.is_new_user) {
+          // navigate("/dashboard", { state: { showOnboarding: true } });
+          navigate("/dashboard");
+        } else {
+          navigate("/dashboard");
+        }
       }
     } catch (err) {
       setError("An error occurred. Please try again.");
