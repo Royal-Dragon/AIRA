@@ -138,7 +138,8 @@ def submit_feedback():
                 "_id": ObjectId(),
                 "generated_reminder": reminder,
                 "scheduled_time": formatted_time_ist,
-                "status": "pending"
+                "status": "pending",
+                "created_at": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
             }
 
             try:
@@ -203,3 +204,4 @@ def submit_daily_feedback():
         return error
 
     return jsonify({"message": "Daily feedback recorded successfully"}), 200
+

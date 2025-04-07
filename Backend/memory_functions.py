@@ -1,7 +1,6 @@
 from bson import ObjectId
 from database.models import get_collection
 from datetime import datetime
-from model_memory import extract_reminder
 
 def get_user_reminders(user_id):
     # Ensure user_id is an ObjectId

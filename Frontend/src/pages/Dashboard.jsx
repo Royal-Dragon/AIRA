@@ -7,9 +7,9 @@ import Aira from "../assets/aira.png";
 import ChatWindow from "../components/ChatWindow";
 import InputField from "../components/InputField";
 import useAuthStore from "../store/authStore";
-import ReactLoading from 'react-loading';
+import ReactLoading from "react-loading";
 import { faL } from "@fortawesome/free-solid-svg-icons";
-import Background from "../source/bg.png"
+import Background from "../source/bg.png";
 import { motion } from "framer-motion";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faShare } from "@fortawesome/free-solid-svg-icons";
@@ -26,27 +26,26 @@ const Dashboard = () => {
     fetchSessionHistory,
   } = useChatStore();
 
-  const location=useLocation();
+  const location = useLocation();
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const history = useChatStore((state) => state.history || []);
-  
+
   // Track if the current session is closed
   const [isSessionClosed, setIsSessionClosed] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   // Check if the session is closed whenever history changes
   const [overlayStep, setOverlayStep] = useState(1);
 
-  const toggleSidebar = () => {};//dummy function
+  const toggleSidebar = () => {}; //dummy function
 
-   
   // Configurable step positions (x, y coordinates as percentages)
   const [stepPositions, setStepPositions] = useState([
-    { x: 26, y: 18 },  // Step 1: Create new session
-    { x: 26, y: 9 },  // Step 2: Toggle sidebar
-    { x: 90, y: 66},  // Step 3: Chat with Aira
-    { x: 26, y: 91 },  // Step 4: Logout
-    { x: 26, y: 30 }   // Step 5: Start journey
+    { x: 26, y: 18 }, // Step 1: Create new session
+    { x: 26, y: 9 }, // Step 2: Toggle sidebar
+    { x: 90, y: 66 }, // Step 3: Chat with Aira
+    { x: 26, y: 91 }, // Step 4: Logout
+    { x: 26, y: 30 }, // Step 5: Start journey
   ]);
 
   const [isEditingPositions, setIsEditingPositions] = useState(false);
@@ -58,9 +57,11 @@ const Dashboard = () => {
 
   const resetPositions = () => {
     setStepPositions([
-      { x: 20, y: 30 }, { x: 80, y: 20 },
-      { x: 50, y: 70 }, { x: 85, y: 85 },
-      { x: 50, y: 50 }
+      { x: 20, y: 30 },
+      { x: 80, y: 20 },
+      { x: 50, y: 70 },
+      { x: 85, y: 85 },
+      { x: 50, y: 50 },
     ]);
   };
 
@@ -69,23 +70,26 @@ const Dashboard = () => {
   useEffect(() => {
     const checkSessions = () => {
       // Show tutorial only if there's 0 or 1 session (assuming 1 might be a default session)
-      const shouldShow = (sessions.length <= 1 && history.length <= 0);
+      const shouldShow = sessions.length <= 1 && history.length <= 0;
       setShouldShowTutorial(shouldShow);
       setShowDashboard(!shouldShow);
     };
-  
+
     if (sessions) {
       checkSessions();
     }
   }, [sessions]);
 
-
-
   useEffect(() => {
     if (history && history.length > 0) {
-      const lastAIMessage = [...history].filter(msg => msg.role === "AI").pop();
-      const isClosed = lastAIMessage && 
-        lastAIMessage.content.includes("Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!");
+      const lastAIMessage = [...history]
+        .filter((msg) => msg.role === "AI")
+        .pop();
+      const isClosed =
+        lastAIMessage &&
+        lastAIMessage.content.includes(
+          "Thanks for sharing! 😊 Now we can have a more personalized conversation tailored just for you!"
+        );
       setIsSessionClosed(isClosed);
     } else {
       setIsSessionClosed(false);
@@ -111,10 +115,6 @@ const Dashboard = () => {
     }
   }, [activeSession, fetchSessionHistory]);
 
-
-
-
-
   const handleNewSession = async () => {
     try {
       const response = await createNewSessionApi();
@@ -131,12 +131,10 @@ const Dashboard = () => {
 
   const handleSelectSession = async (sessionId) => {
     setActiveSession(sessionId);
-    const his=await fetchSessionHistory(sessionId); // This will trigger the history useEffect
+    const his = await fetchSessionHistory(sessionId); // This will trigger the history useEffect
     console.log(his);
-
-    
   };
-  
+
   const handleSendMessage = async (message) => {
     try {
       await sendMessage(message, activeSession);
@@ -158,35 +156,33 @@ const Dashboard = () => {
       icon: "fa-plus-circle",
       action: toggleSidebar,
       buttonText: "Next ->",
-      design:"flex bg-blue"
+      design: "flex bg-blue",
     },
     {
       title: "Click here to toggle session sidebar",
       icon: "fa-bars",
       action: toggleSidebar,
-      buttonText: "Next ->"
+      buttonText: "Next ->",
     },
     {
       title: "Click here to chat with Aira",
       icon: "fa-comment-dots",
       action: toggleSidebar,
-      buttonText: "Next ->"
+      buttonText: "Next ->",
     },
     {
       title: "Click here for logout",
       icon: "fa-sign-out-alt",
-      action:toggleSidebar,
-      buttonText: "Next ->"
+      action: toggleSidebar,
+      buttonText: "Next ->",
     },
     {
       title: "Click on Introduction session to start our journey",
       icon: "fa-rocket",
       action: () => setShowDashboard(true),
-      buttonText: "Begin Journey!"
-    }
+      buttonText: "Begin Journey!",
+    },
   ];
-
-
 
   return (
     <motion.div
@@ -203,24 +199,25 @@ const Dashboard = () => {
           onSelectSession={handleSelectSession}
           handleLogout={handleLogout}
         />
-      
+
         <div className="w-full  flex flex-col p-4 border-l-2 border-[#606567] relative">
-          <img 
-            src={Background} 
-            alt="Background" 
-            className="absolute inset-0 w-full h-full object-cover opacity-[1] z-0" 
+          <img
+            src={Background}
+            alt="Background"
+            className="absolute inset-0 w-full h-full object-cover opacity-[1] z-0"
           />
           <div className="text-3xl font-bold flex justify-between items-center text-[#555453] border-[#555453] pb-2 border-b-2 mb-2 z-1">
             <div className="flex items-center">
-              <img 
+              <img
                 src={Aira}
-                alt="Aira Logo" 
-                className="w-12 h-12 rounded-full scale-125 mr-3"
+                alt="Aira Logo"
+                className="w-12 h-12 rounded-full mr-3 -pt-10 object-cover"
               />
               <div>
                 <h2 className="text-3xl font-bold">Aira</h2>
                 <div className="flex items-center ">
-                  <div className="bg-green-500 mt-1 mr-1 h-2 w-2 rounded-4xl "></div><p className="text-sm text-">online</p>
+                  <div className="bg-green-500 mt-1 mr-1 h-2 w-2 rounded-4xl "></div>
+                  <p className="text-sm text-">online</p>
                 </div>
               </div>
             </div>
@@ -229,13 +226,13 @@ const Dashboard = () => {
               <span className="text-lg -mt-1 font-medium">Share</span>
             </button>
           </div>
-      
+
           {showWelcomeScreen ? (
             <div className="flex-1 flex flex-col justify-center items-center z-1">
               <h1 className="text-[#555453] text-center font-semibold text-4xl sm:text-5xl md:text-6xl lg:text-7xl mb-6 sm:mb-8 md:mb-12">
                 Welcome {user?.username}
               </h1>
-      
+
               {!isSessionClosed && (
                 <div className="w-3/4  max-w-2xl">
                   <InputField
@@ -249,7 +246,7 @@ const Dashboard = () => {
           ) : (
             <>
               <ChatWindow messages={history} isThinking={isThinking} />
-      
+
               {!isSessionClosed ? (
                 <div className=" flex  justify-center items-center z-1">
                   <div className="w-3/4  max-w-2xl ">
@@ -262,29 +259,30 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <div className="text-center p-4 text-gray-400 border-t border-[#606567] mt-2 z-1">
-                  This personalized conversation has been completed. Start a new session to continue chatting.
+                  This personalized conversation has been completed. Start a new
+                  session to continue chatting.
                 </div>
               )}
             </>
           )}
         </div>
       </div>
-  
+
       {!showDashboard && shouldShowTutorial && (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black opacity-40"></div>
-          
+
           {/* Position configuration controls */}
           {isEditingPositions && (
             <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-lg z-50">
               <h3 className="font-bold mb-2">Configure Step Positions</h3>
-              <button 
+              <button
                 onClick={resetPositions}
                 className="bg-amber-100 text-amber-800 px-3 py-1 rounded mr-2 text-sm"
               >
                 Reset Positions
               </button>
-              <button 
+              <button
                 onClick={() => setIsEditingPositions(false)}
                 className="bg-amber-600 text-white px-3 py-1 rounded text-sm"
               >
@@ -295,31 +293,40 @@ const Dashboard = () => {
 
           {/* Steps rendered at configurable positions */}
           {steps.map((step, index) => (
-            <div 
+            <div
               key={index}
               className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all ${
-                overlayStep === index + 1 ? 'z-40' : 'z-30 invisible opacity-70 scale-90'
+                overlayStep === index + 1
+                  ? "z-40"
+                  : "z-30 invisible opacity-70 scale-90"
               }`}
               style={{
                 left: `${stepPositions[index].x}%`,
                 top: `${stepPositions[index].y}%`,
-                cursor: isEditingPositions ? 'move' : 'pointer'
+                cursor: isEditingPositions ? "move" : "pointer",
               }}
               draggable={isEditingPositions}
               onDragEnd={(e) => {
                 if (!isEditingPositions) return;
-                const rect = e.currentTarget.parentElement.getBoundingClientRect();
+                const rect =
+                  e.currentTarget.parentElement.getBoundingClientRect();
                 const x = ((e.clientX - rect.left) / rect.width) * 100;
                 const y = ((e.clientY - rect.top) / rect.height) * 100;
                 handlePositionChange(index, { x, y });
               }}
               onClick={() => !isEditingPositions && setOverlayStep(index + 1)}
             >
-              <div className={`bg-white p-4 rounded-lg shadow-lg w-64 ${
-                overlayStep === index + 1 ? 'border-2 border-amber-400' : 'border border-gray-200'
-              }`}>
+              <div
+                className={`bg-white p-4 rounded-lg shadow-lg w-64 ${
+                  overlayStep === index + 1
+                    ? "border-2 border-amber-400"
+                    : "border border-gray-200"
+                }`}
+              >
                 <div className="flex items-center mb-3">
-                  <i className={`fas fa-arrow-left text-amber-600 mr-3 -mt-6`}></i>
+                  <i
+                    className={`fas fa-arrow-left text-amber-600 mr-3 -mt-6`}
+                  ></i>
                   <h4 className="font-semibold text-gray-800">{step.title}</h4>
                 </div>
                 {overlayStep === index + 1 && (
@@ -330,8 +337,8 @@ const Dashboard = () => {
                       if (index < steps.length - 1) setOverlayStep(index + 2);
                     }}
                     className={`bg-amber-600 hover:bg-amber-700 text-white py-1 px-3 rounded text-sm w-full transition-all ${
-                    overlayStep === steps.length ? 'animate-pulse' : ''
-                  }`}
+                      overlayStep === steps.length ? "animate-pulse" : ""
+                    }`}
                   >
                     {step.buttonText}
                   </button>
@@ -339,12 +346,10 @@ const Dashboard = () => {
               </div>
             </div>
           ))}
-          
         </div>
       )}
-
-  </motion.div>
-);
+    </motion.div>
+  );
 };
 
 export default Dashboard;
