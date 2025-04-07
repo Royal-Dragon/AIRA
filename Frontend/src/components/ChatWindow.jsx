@@ -92,17 +92,12 @@ const ChatWindow = ({ messages, isThinking }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
             >
-              <div className="chat-header">
-                {isUser ? user.username : "AIRA"}
-                <time className="text-xs opacity-50 ml-2">
-                  {new Date(msg.timestamp || Date.now()).toLocaleTimeString()}
-                </time>
-              </div>
+           
               {msg.role === "AI" ? (
                 <div className="flex flex-col items-start">
                   <div
                     className={`chat-bubble bg-[#E6CCC5] text-[#555453] relative ${
-                      isSmallMessage ? "flex justify-between items-center" : "flex flex-col"
+                      isSmallMessage ? "flex justify-between items-center " : "flex flex-col"
                     }`}
                   >
                     <span>{msg.content}</span>
@@ -136,9 +131,7 @@ const ChatWindow = ({ messages, isThinking }) => {
                   </div>
                 </div>
               )}
-              <div className="chat-footer opacity-50">
-                {isUser ? "Seen" : "Delivered"}
-              </div>
+            
             </motion.div>
           );
         })

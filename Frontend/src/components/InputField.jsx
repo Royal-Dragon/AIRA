@@ -33,7 +33,7 @@ const InputField = ({ activeSession, isThinking, onSendMessage }) => {
         }}
       />
       <button
-        className="bg-[#ECB5A6] border border-[#555453] hover:bg-[#ffa58d] text-[#555453] px-4 py-2 rounded-lg flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed"
+        className="bg-[#ECB5A6]  hover:bg-[#ffa58d] text-[#555453] px-4 py-2 rounded-lg flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed"
         onClick={handleSend}
         disabled={isThinking || !activeSession}
       >
