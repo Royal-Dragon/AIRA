@@ -68,158 +68,168 @@ def format_datetime_for_response(dt):
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return dt
 
-@reminder_bp.route("/get_due_reminders", methods=["GET"])
-def get_due_reminders():
+@reminder_bp.route("/get_all_reminders", methods=["GET"])
+def get_all_reminders():
     """
-    Retrieve all due reminders for a specific user.
-    A reminder is due if its scheduled_time is <= current time and status is "pending".
-    Staggers multiple reminders by spacing them 10 minutes apart.
+    Retrieve all reminders for a specific user regardless of due status.
+    Returns reminders sorted by scheduled_time (earliest first).
+    Handles dates stored as strings in IST format.
     """
     user_id = request.args.get("user_id")
     
-    # Get current time in UTC and IST
-    current_time_utc = datetime.now(utc_tz)
-    current_time_ist = current_time_utc.astimezone(ist_tz)
+    # Get current time in IST for comparison
+    current_time = datetime.now()
+    current_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
     
-    logger.info(f"Current time in UTC: {current_time_utc}")
-    logger.info(f"Current time in India (IST): {current_time_ist}")
+    logger.info(f"Current time in IST: {current_time_str}")
 
+    # Find the user document
     user = reminder_collection.find_one({"user_id": user_id})
     if not user:
         return jsonify({"reminders": []})
 
-    # Get reminders that are due and sort them by scheduled_time
-    due_reminders = []
-    queued_reminders = []
+    # Process all reminders
+    all_reminders = []
     
     for reminder in user.get("reminders", []):
-        # Parse the reminder time and ensure it has timezone info
-        reminder_time = reminder["scheduled_time"]
-        reminder_status = reminder["status"]
+        # Create a copy of the reminder for response
+        reminder_copy = reminder.copy()
+        reminder_copy["_id"] = str(reminder_copy["_id"])
         
-        # Convert to datetime object with timezone if it's not already
-        if isinstance(reminder_time, str):
-            try:
-                # Try to parse as ISO format first
-                parsed_time = datetime.fromisoformat(reminder_time.replace('Z', '+00:00'))
-                
-                # If no timezone info, assume it's in IST
-                if parsed_time.tzinfo is None:
-                    reminder_time = ist_tz.localize(parsed_time)
-                else:
-                    reminder_time = parsed_time
-            except ValueError:
-                try:
-                    # Try to parse as custom format
-                    parsed_time = datetime.strptime(reminder_time, "%Y-%m-%d %H:%M:%S")
-                    
-                    # Assume the time is in IST
-                    reminder_time = ist_tz.localize(parsed_time)
-                except ValueError:
-                    # If all parsing fails, just log and skip
-                    logger.error(f"Could not parse time: {reminder_time}")
-                    continue
-        elif isinstance(reminder_time, datetime) and reminder_time.tzinfo is None:
-            # If it's a naive datetime, assume it's in IST
-            reminder_time = ist_tz.localize(reminder_time)
+        # Get the scheduled time as string
+        scheduled_time_str = reminder["scheduled_time"]
         
-        # Check if reminder is due (compare in IST)
-        is_due = reminder_time <= current_time_ist
-        
-        if is_due and reminder_status == "pending":
-            queued_reminders.append({
-                **reminder,
-                "scheduled_time": reminder_time  # Store the datetime object with timezone
-            })
-    
-    # Sort by scheduled time so we deliver oldest first
-    queued_reminders.sort(key=lambda r: r["scheduled_time"])
-    logger.info(f"Queued reminders: {queued_reminders}")
-    
-    # Return only the first reminder that's due and reschedule the rest with 10-minute intervals
-    if queued_reminders:
-        # Take the first reminder to return immediately
-        first_reminder = queued_reminders[0]
-        first_reminder_copy = first_reminder.copy()
-        first_reminder_copy["_id"] = str(first_reminder_copy["_id"])
-        
-        # Format datetime as string without timezone info for JSON serialization
-        first_reminder_copy["scheduled_time"] = format_datetime_for_response(first_reminder_copy["scheduled_time"])
-        due_reminders.append(first_reminder_copy)
-        
-        # Queue the rest with 10-minute intervals
-        next_delivery_time = current_time_ist + timedelta(minutes=10)
-        
-        for i in range(1, len(queued_reminders)):
-            reminder = queued_reminders[i]
-            reminder_id = reminder["_id"]
+        # Add a field to indicate if the reminder is due
+        # Compare string dates directly or parse if necessary
+        try:
+            is_due = False
+            if isinstance(scheduled_time_str, str):
+                # Parse strings to datetime objects for comparison
+                scheduled_datetime = datetime.strptime(scheduled_time_str, "%Y-%m-%d %H:%M:%S")
+                is_due = scheduled_datetime <= current_time and reminder["status"] == "pending"
+            else:
+                # Handle any non-string scheduled_time (fallback)
+                logger.warning(f"Unexpected scheduled_time format: {type(scheduled_time_str)}")
+                scheduled_time_str = str(scheduled_time_str)
+        except ValueError as e:
+            logger.error(f"Error parsing scheduled_time: {e}")
+            is_due = False
             
-            # Convert next_delivery_time to UTC for storage
-            next_delivery_time_utc = next_delivery_time.astimezone(utc_tz)
-            
-            # Update the scheduled time in the database
-            reminder_collection.update_one(
-                {"user_id": user_id, "reminders._id": ObjectId(reminder_id)},
-                {"$set": {"reminders.$.scheduled_time": next_delivery_time_utc}}
-            )
-            
-            next_delivery_time += timedelta(minutes=10)
-            logger.info(f"Rescheduled reminder {i} to: {next_delivery_time} IST")
+        reminder_copy["is_due"] = is_due
+        all_reminders.append(reminder_copy)
     
-    logger.info(f"Returning due reminders: {due_reminders}")
-    return jsonify({"reminders": due_reminders})
+    # Sort by scheduled time (earliest first)
+    all_reminders.sort(key=lambda r: r["scheduled_time"])
+    
+    logger.info(f"Returning all reminders: {len(all_reminders)} found")
+    return jsonify({"reminders": all_reminders})
 
-@reminder_bp.route("/update_reminder_status", methods=["POST"])
-def update_reminder_status():
+@reminder_bp.route("/update_reminder", methods=["POST"])
+def update_reminder():
     try:
+        # Parse request data
         data = request.json
         user_id = data.get("user_id")
         reminder_id = data.get("reminder_id")
-        new_status = data.get("status")  # "done" or "not_done"
+        generated_reminder = data.get("title")  # Request uses "title", mapped to "generated_reminder"
+        scheduled_time = data.get("scheduled_time")
+        status = data.get("status")
 
-        if not user_id or not reminder_id or not new_status:
-            return jsonify({"error": "Missing required fields"}), 400
+        # Validate required fields
+        if not user_id or not reminder_id:
+            return jsonify({"error": "Missing required fields (user_id, reminder_id)"}), 400
 
-        logger.info(f"User ID: {user_id}")
-        logger.info(f"Reminder ID: {reminder_id}")
-        logger.info(f"New Status: {new_status}")
+        # Case 1: Status is provided
+        if status:
+            if status == "done":
+                # Delete the reminder
+                logger.info("Processing 'done' status")
+                result = reminder_collection.update_one(
+                    {"user_id": user_id},
+                    {"$pull": {"reminders": {"_id": ObjectId(reminder_id)}}}
+                )
+                if result.modified_count > 0:
+                    logger.info(f"Deletion result: {result.modified_count} document(s) modified")
+                    return jsonify({"message": "Reminder deleted successfully"}), 200
+                else:
+                    return jsonify({"error": "Reminder not found"}), 404
 
-        if new_status == "done":
-            # Delete the reminder
-            logger.info("Processing 'done' status")
-            result = reminder_collection.update_one(
-                {"user_id": user_id},
-                {"$pull": {"reminders": {"_id": ObjectId(reminder_id)}}}
-            )
-            logger.info(f"Deletion result: {result.modified_count} document(s) modified")
-        elif new_status == "not_done":
-            # Get the current time in IST, then add 1 hour
-            current_time_ist = datetime.now(ist_tz)
-            new_time_ist = current_time_ist + timedelta(hours=1)
-            
-            # Format for storage in a consistent format (without timezone info)
-            formatted_time = new_time_ist.strftime("%Y-%m-%d %H:%M:%S")
-            
-            # Update in database 
+            elif status == "not_done":  # Handle both formats
+                # Parse the scheduled time string to datetime
+                try:
+                    current_time = datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S")
+                    # Add 1 hour
+                    new_time = current_time + timedelta(hours=1)
+                    # Format back to string
+                    formatted_time = new_time.strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError as e:
+                    logger.error(f"Invalid scheduled_time format: {str(e)}")
+                    return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
+
+                # Prepare update fields
+                update_fields = {
+                    "reminders.$.scheduled_time": formatted_time,
+                    "reminders.$.status": "pending"
+                }
+                if generated_reminder:
+                    update_fields["reminders.$.generated_reminder"] = generated_reminder
+
+                # Update the reminder
+                result = reminder_collection.update_one(
+                    {"user_id": user_id, "reminders._id": ObjectId(reminder_id)},
+                    {"$set": update_fields}
+                )
+                if result.modified_count > 0:
+                    logger.info(f"Rescheduled reminder to {formatted_time}. Updated fields: {update_fields}")
+                    return jsonify({
+                        "message": "Reminder rescheduled and updated successfully",
+                        "new_scheduled_time": formatted_time
+                    }), 200
+                else:
+                    return jsonify({"error": "Reminder not found"}), 404
+
+            else:
+                return jsonify({"error": "Invalid status"}), 400
+
+        # Case 2: No status provided, update fields as provided
+        else:
+            update_fields = {}
+            if generated_reminder:
+                update_fields["reminders.$.generated_reminder"] = generated_reminder
+            if scheduled_time:
+                try:
+                    # Validate scheduled_time format
+                    datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S")
+                    update_fields["reminders.$.scheduled_time"] = scheduled_time
+                except ValueError:
+                    return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:%S"}), 400
+
+            # If no fields to update, return an error
+            if not update_fields:
+                return jsonify({"error": "No fields to update"}), 400
+
+            # Perform the update
             result = reminder_collection.update_one(
                 {"user_id": user_id, "reminders._id": ObjectId(reminder_id)},
-                {"$set": {"reminders.$.scheduled_time": formatted_time, "reminders.$.status": "pending"}}
+                {"$set": update_fields}
             )
-            logger.info(f"Rescheduled reminder to {formatted_time}. Result: {result.modified_count} document(s) modified")
-        else:
-            return jsonify({"error": "Invalid status"}), 400
-        
-        return jsonify({"message": "Reminder status updated"}), 200
+            if result.modified_count > 0:
+                logger.info(f"Updated reminder with fields: {update_fields}")
+                return jsonify({"message": "Reminder updated successfully"}), 200
+            else:
+                return jsonify({"error": "Reminder not found or no changes made"}), 404
+
     except Exception as e:
-        logger.error(f"Error updating reminder status: {str(e)}")
-        return jsonify({"error": "An error occurred while updating the reminder"}), 500
+        logger.error(f"Error updating reminder: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
     
 @reminder_bp.route("/add_reminder", methods=["POST"])
 def add_reminder():
     """
-    Add a new reminder for a user
-    Expects JSON body with: user_id, title, scheduled_time (in IST)
-    Stores scheduled_time in IST directly
+    Add a new reminder for a user.
+    Expects JSON body with: user_id, title, scheduled_time (in IST).
+    Stores scheduled_time and created_at as strings in IST format ("YYYY-MM-DD HH:MM:SS").
+    Returns them in the same IST format.
     """
     try:
         data = request.json
@@ -227,48 +237,48 @@ def add_reminder():
         title = data.get("title")
         scheduled_time = data.get("scheduled_time")  # Expected in IST format: "YYYY-MM-DD HH:MM:SS"
 
+        # Validate required fields
         if not all([user_id, title, scheduled_time]):
             return jsonify({"error": "Missing required fields (user_id, title, scheduled_time)"}), 400
 
-        # Parse the incoming IST time WITHOUT localizing it first
+        # Parse the incoming scheduled_time (assumed to be IST)
         try:
             # Parse as naive datetime
             naive_datetime = datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S")
-            # Explicitly set as IST
+            # Localize to IST to confirm it’s treated as IST
             ist_datetime = ist_tz.localize(naive_datetime)
-            # Store the UTC equivalent for MongoDB (which stores in UTC)
-            utc_datetime = ist_datetime.astimezone(pytz.UTC)
         except ValueError as e:
             logger.error(f"Invalid scheduled_time format: {str(e)}")
             return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
 
-        # Create new reminder object, storing scheduled_time in UTC for MongoDB
+        # Get current time in IST
+        ist_datetime_now = datetime.now(ist_tz)
+
+        # Format times as IST strings for storage
+        scheduled_time_ist_str = ist_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        created_at_ist_str = ist_datetime_now.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Create new reminder object, storing times as IST strings
         new_reminder = {
             "_id": ObjectId(),
-            "title": title,
-            "scheduled_time": utc_datetime,  # Store in UTC for MongoDB
-            "time_zone": "Asia/Kolkata",  # Store the time zone reference
+            "generated_reminder": title,
+            "scheduled_time": scheduled_time_ist_str,  # Store as IST string
             "status": "pending",
-            "created_at": datetime.now(pytz.UTC)  # Store creation time in UTC
+            "created_at": created_at_ist_str,  # Store as IST string
         }
 
-        # Add reminder to user's reminders array
+        # Add reminder to user's reminders array in MongoDB
         result = reminder_collection.update_one(
             {"user_id": user_id},
             {"$push": {"reminders": new_reminder}},
-            upsert=True  # Creates new document if user doesn't exist
+            upsert=True  # Creates new document if user doesn’t exist
         )
 
+        # Check if the operation was successful
         if result.modified_count > 0 or result.upserted_id:
-            # Convert back to IST string for response (remove timezone info)
+            # Prepare response: times are already IST strings
             new_reminder_copy = new_reminder.copy()
-            new_reminder_copy["_id"] = str(new_reminder_copy["_id"])
-            # Convert UTC time back to IST for response
-            ist_time = new_reminder_copy["scheduled_time"].astimezone(ist_tz)
-            new_reminder_copy["scheduled_time"] = format_datetime_for_response(ist_time)
-            ist_created_at = new_reminder_copy["created_at"].astimezone(ist_tz)
-            new_reminder_copy["created_at"] = format_datetime_for_response(ist_created_at)
-            
+            new_reminder_copy["_id"] = str(new_reminder_copy["_id"])  # Convert ObjectId to string
             return jsonify({
                 "message": "Reminder added successfully",
                 "reminder": new_reminder_copy
@@ -280,56 +290,6 @@ def add_reminder():
         logger.error(f"Error adding reminder: {str(e)}")
         return jsonify({"error": "An error occurred while adding the reminder"}), 500
 
-@reminder_bp.route("/update_reminder", methods=["PUT"])
-def update_reminder():
-    """
-    Update an existing reminder
-    Expects JSON body with: user_id, reminder_id, title (optional), scheduled_time (optional, in IST)
-    Stores scheduled_time in UTC for MongoDB with time zone reference
-    """
-    try:
-        data = request.json
-        user_id = data.get("user_id")
-        reminder_id = data.get("reminder_id")
-        title = data.get("title")
-        scheduled_time = data.get("scheduled_time")  # Expected in IST format: "YYYY-MM-DD HH:MM:SS"
-
-        if not user_id or not reminder_id:
-            return jsonify({"error": "Missing required fields (user_id, reminder_id)"}), 400
-
-        # Prepare update fields
-        update_fields = {}
-        if title:
-            update_fields["reminders.$.title"] = title
-        if scheduled_time:
-            try:
-                # Parse naive datetime, explicitly set as IST, then convert to UTC
-                naive_datetime = datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M:%S")
-                ist_datetime = ist_tz.localize(naive_datetime)
-                utc_datetime = ist_datetime.astimezone(pytz.UTC)
-                update_fields["reminders.$.scheduled_time"] = utc_datetime  # Store in UTC
-                update_fields["reminders.$.time_zone"] = "Asia/Kolkata"  # Store time zone reference
-            except ValueError as e:
-                logger.error(f"Invalid scheduled_time format: {str(e)}")
-                return jsonify({"error": "Invalid scheduled_time format. Use YYYY-MM-DD HH:MM:SS"}), 400
-
-        if not update_fields:
-            return jsonify({"error": "No fields to update"}), 400
-
-        # Update the reminder
-        result = reminder_collection.update_one(
-            {"user_id": user_id, "reminders._id": ObjectId(reminder_id)},
-            {"$set": update_fields}
-        )
-
-        if result.modified_count > 0:
-            return jsonify({"message": "Reminder updated successfully"}), 200
-        else:
-            return jsonify({"error": "Reminder not found or no changes made"}), 404
-
-    except Exception as e:
-        logger.error(f"Error updating reminder: {str(e)}")
-        return jsonify({"error": "An error occurred while updating the reminder"}), 500
 
 @reminder_bp.route("/delete_reminder", methods=["DELETE"])
 def delete_reminder():
@@ -359,8 +319,3 @@ def delete_reminder():
     except Exception as e:
         logger.error(f"Error deleting reminder: {str(e)}")
         return jsonify({"error": "An error occurred while deleting the reminder"}), 500
-
-# Make sure to add this import at the top of your file
-import pytz
-# Define IST timezone
-ist_tz = pytz.timezone('Asia/Kolkata')

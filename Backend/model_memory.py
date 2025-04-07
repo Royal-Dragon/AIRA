@@ -50,7 +50,7 @@ def extract_goal(user_message, aira_response):
     conversation = f"""
     User: {user_message}
     AI Assistant: {aira_response}
-    
+
     What is the goal in this conversation?
     Don't use this : 'The goal in this conversation is:' just give the goal.
     """
