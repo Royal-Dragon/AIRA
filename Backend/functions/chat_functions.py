@@ -10,6 +10,8 @@ import logging
 from database.models import chat_history_collection
 import pytz
 from datetime import datetime
+from langchain_groq import ChatGroq
+from config import GROQ_API_KEY
 
 
 nltk.download("punkt")
@@ -165,23 +167,46 @@ def extract_keywords(text):
 # Define words to avoid in titles
 negative_words = {"stressful", "tired", "worried", "anxious", "nervous", "sad", "bad", "boring", "exams", "breakup"}
 
-def generate_title(aira_response):
-    """Generates a short, natural title (4-5 words) based on AIRA's response."""
+def generate_title(messages):
+    """Generates a session title from full chat history."""
+    try:
+        model = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="Llama3-8b-8192")
+        if not messages:
+            return "New Chat"
+        
+        # Join last few messages for context (last 4-6 exchanges)
+        chat_context = "\n".join([
+            f"{msg['role']}: {msg['content']}" 
+            for msg in messages[-6:]
+        ])
 
-    # Tokenize response into sentences and words
-    words = word_tokenize(aira_response)
+        prompt = f"""
+        You are a helpful assistant that generates a short, meaningful title (4-6 words max) based on a conversation between a user and an AI.
 
-    # Remove stopwords and non-alphabetic words
-    stop_words = set(stopwords.words("english"))
-    meaningful_words = [word for word in words if word.lower() not in stop_words and word.isalnum()]
-    print("meaning ful words : ",meaningful_words)
-    # Pick the first 4-5 meaningful words
-    title_words = meaningful_words[:5]  # Keep only the first few important words
-    
-    # Create a natural title
-    title = " ".join(title_words).title() if title_words else "New Chat"
+        Here is the conversation:
+        {chat_context}
 
-    return title
+        Generate a relevant and natural-sounding title that reflects the main theme of the conversation. Avoid generic greetings like "Hi" or "Hello".
+
+        Only return the title text.
+        """
+
+        # The invoke method returns a response object, not just a string
+        response = model.invoke(prompt)
+        
+        # Extract the actual content from the response
+        # This might vary depending on the exact return type from ChatGroq
+        title = response.content if hasattr(response, 'content') else str(response)
+        
+        # Clean up the title (remove quotes, newlines, etc.)
+        title = title.strip().strip('"\'').strip()
+        
+        return title if title else "New Chat"
+    except Exception as e:
+        # Log the error (in production, use proper logging)
+        print(f"Error generating title: {str(e)}")
+        return "New Chat"
+
 
 # Setup a scheduled task for auto-deletion
 def setup_auto_deletion_task():

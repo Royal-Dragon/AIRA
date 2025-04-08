@@ -6,6 +6,8 @@ from routes.auth import verify_jwt_token
 import logging
 from model_memory import generate_user_story
 from database.models import get_collection
+from database.models import chat_history_collection
+from model_memory import generate_motivational_message_from_chat_history
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +116,16 @@ def generate_story():
 
     story = generate_user_story(user)
     return jsonify({"story": story})
+
+@user_bp.route('/send_motivation', methods=['GET'])
+def send_motivation():
+    user_id = request.args.get("user_id")
+    user_chat_history = chat_history_collection.find_one({"user_id": ObjectId(user_id)})
+    if not user_chat_history:
+        return jsonify({"message": "No chat history found"}), 404
+
+    motivation = generate_motivational_message_from_chat_history(user_chat_history)
+
+    return jsonify({
+        "message": motivation
+    })

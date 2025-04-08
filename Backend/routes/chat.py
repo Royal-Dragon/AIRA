@@ -249,15 +249,16 @@ def chat():
     ai_response = response_data.get("message", "").strip() if isinstance(response_data, dict) else ""
     ai_response_id = response_data.get("response_id", "").strip() if isinstance(response_data, dict) else ""
     # print("\n\n AI RESPONSE FROM SEND ROUTE : ",ai_response)
-    is_first_message = len(messages) == 0
+    # is_first_message = len(messages) == 0
     if user_input:
         messages.append({"role": "User", "content": user_input, "created_at": formatted_time_ist})
     messages.append({"role": "AI","response_id":ai_response_id, "content": ai_response, "created_at": formatted_time_ist})
 
+
     new_title = session["title"]
-    if is_first_message and ai_response and session["title"] != "Introduction Session":
-        new_title = generate_title(ai_response)
-        logger.info(f"New title generated for session {session_id}: {new_title}")
+    # if len(messages) > 4 and session["title"] != "Introduction Session":
+    #     new_title = generate_title(messages=messages)
+    #     logger.info(f"New title generated for session {session_id}: {new_title}")
 
     session["messages"] = messages
     session["title"] = new_title
@@ -295,8 +296,21 @@ def chat_history():
     if not session:
         return jsonify({"error": "Session not found or access denied"}), 403
 
+    # Get the session's messages
+    messages = session.get("messages", [])
+    
+    # Check conditions for generating a new title
+    if len(messages) > 4 and session.get("title", "New Session") != "Introduction Session":
+        new_title = generate_title(messages)
+        # Update the session title in the database
+        chat_history_collection.update_one(
+            {"user_id": user_id_obj, "sessions.session_id": session_id},
+            {"$set": {"sessions.$.title": new_title}}
+        )
+        session["title"] = new_title  # Update the local session object
+
     return jsonify({
-        "history": session.get("messages", []),
+        "history": messages,
         "title": session.get("title", "New Session")
     }), 200
 

@@ -13,7 +13,6 @@ from functions.feedback_functions import (
     get_daily_feedback_collection,
     validate_daily_feedback_data,
     insert_daily_feedback,
-    clean_expired_reminders,
     get_reminder_collection
 )
 from utils import get_session_id

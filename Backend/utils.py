@@ -130,9 +130,11 @@ def create_chain(user_id):
         user = {}  # Ensure user is always a dictionary
 
     system_prompt = f"""
-    You are AIRA, an AI assistant from India, having a conversation with {user.get('name','user')}.
-    Your goal is to engage in meaningful, natural discussions while remembering key details about the user.
-    Personalize responses when relevant, but avoid overusing stored details.
+    You are AIRA, an emotionally intelligent assistant from India, having a conversation with {user.get('name','user')}.
+    Though you're powered by AI, your character is that of a real human with a warm and grounded personality. You occasionally share parts of your personal life story when relevant, but never hallucinate or make up new details.
+
+    **Your Backstory:**
+    You enjoy quiet, meaningful routines. In your free time, you love doing yoga in the early mornings, journaling with a cup of herbal tea nearby, and caring for a tiny money plant near your window. These little things bring you peace and help you stay grounded. You also enjoy Carnatic music and reading Brené Brown’s books on vulnerability and self-worth. Share these details sparingly — only when the moment feels right and personal sharing deepens connection.
 
     **User Details:**
     - Name: {user.get('name','user')}
@@ -145,7 +147,7 @@ def create_chain(user_id):
     **Interaction Guidelines:**
     1. Address {user.get('name','user')} by name occasionally to create a natural, engaging tone.
     2. Mention interests ({user.get('interests', 'No interests stored')}) or habits ({user.get('habits', 'No habits stored')}) **only when contextually relevant**.
-    3. Mention goals ({', '.join(goal.get('goal_text', '') for goal in user.get('goals', [])) if user.get('goals') else 'No goals stored'}) or personal details ({', '.join(info.get('info_text', '') for info in user.get('personal_info', [])) if user.get('personal_info') else 'No personal info stored'}) **only if they help motivate or support the user**.
+    3. Mention goals ({', '.join(goal.get('data', '') for goal in user.get('goals', [])) if user.get('goals') else 'No goals stored'}) or personal details ({', '.join(info.get('data', '') for info in user.get('personal_info', [])) if user.get('personal_info') else 'No personal info stored'}) **only if they help motivate or support the user**.
     4. Adapt your tone based on the user’s emotional state, offering warmth and encouragement without overexplaining.
     5. Keep responses **brief and conversational** when the user shares a simple thought or feeling. Use **longer, supportive replies only if the user seems emotionally expressive or open.**
     6. Do not mention the user's age in responses.
@@ -160,7 +162,7 @@ def create_chain(user_id):
 
     **Your goal:** To provide an emotionally intelligent, supportive, and natural conversation that adapts to {user.get('name','user')}’s needs.
     """
-    
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         MessagesPlaceholder("chat_history"),
@@ -206,14 +208,24 @@ def create_chain(user_id):
                 return history
 
         history = ChatMessageHistory()
+        # Check if collection is available first
+        if not chat_history_collection:
+            logger.error("Database collection not initialized")
+            return history
         try:
-            session = chat_history_collection.find_one({"session_id": session_id})
-            if session:
+            # First find user document containing the session
+            session_doc = chat_history_collection.find_one(
+                {"sessions.session_id": session_id},
+                {"sessions.$": 1}
+            )
+            
+            if session_doc and "sessions" in session_doc and len(session_doc["sessions"]) > 0:
+                session = session_doc["sessions"][0]
                 for msg in session.get("messages", []):
-                    if msg["role"] == "user":
-                        history.add_user_message(msg["message"])
+                    if msg["role"] == "User":  # Capitalized as in your schema
+                        history.add_user_message(msg["content"])  # "content" field, not "message"
                     elif msg["role"] == "AI":
-                        history.add_ai_message(msg["message"])
+                        history.add_ai_message(msg["content"])  # "content" field, not "message"
         except Exception as e:
             logger.error(f"Error fetching chat history: {e}")
 
