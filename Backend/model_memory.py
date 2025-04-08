@@ -107,3 +107,29 @@ def extract_personal_info(user_message, aira_response):
     except Exception as e:
         print(f"Error: {e}")
         return "Error processing personal info."
+    
+def generate_user_story(user_data):
+    model = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="Llama3-8b-8192")
+    name = user_data.get("name", "This user")
+    habits = user_data.get("habits", None)
+    interests = user_data.get("interests", None)
+    goals = [g["data"] for g in user_data.get("goals", [])]
+    personal_info = [info["data"] for info in user_data.get("personal_info", [])]
+
+    story_context = f"""
+    You are AIRA, a thoughtful assistant. Write a short, inspiring 3-5 sentence story about the user's journey based on the data below.
+    The tone should feel hopeful and motivating. This story will be shown in a welcome card on the user's dashboard.
+
+    - Name: {name}
+    - Habits: {habits or 'None'}
+    - Interests: {interests or 'None'}
+    - Goals: {', '.join(goals) if goals else 'None'}
+    - Personal Info: {', '.join(personal_info) if personal_info else 'None'}
+
+    Only output the short story. Do not include headings or explanations.
+    """
+
+    result = model.invoke(story_context)
+
+    story_text = result.content.strip()
+    return story_text

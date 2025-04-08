@@ -48,3 +48,43 @@ def add_custom_goal():
     )
 
     return jsonify({"message": "Custom goal added to AIRA's Brain.", "goal": goal_text}), 200
+
+@visionboard_bp.route("/get_goals", methods=["GET"])
+def get_goals():
+    # Get user_id from query parameters
+    user_id = request.args.get("user_id")
+    
+    if not user_id:
+        return jsonify({"error": "Missing user_id parameter"}), 400
+
+    brain_collection = get_collection("aira_brain")
+
+    try:
+        user_object_id = ObjectId(user_id)
+    except Exception as e:
+        logger.error(f"Invalid user_id format: {str(e)}")
+        return jsonify({"error": "Invalid user_id format"}), 400
+
+    # Find the user and their goals
+    user = brain_collection.find_one({"user_id": user_object_id})
+    if not user:
+        return jsonify({"error": "User not found in AIRA's Brain"}), 404
+
+    # Get goals or empty list if none exist
+    goals = user.get("goals", [])
+    
+    # Format the goals for frontend consumption
+    formatted_goals = [
+        {
+            "id": goal["response_id"],
+            "text": goal["data"],
+            "timestamp": goal["timestamp"].isoformat(),  # Convert datetime to ISO string
+        }
+        for goal in goals
+    ]
+
+    return jsonify({
+        "message": "Goals retrieved successfully",
+        "goals": formatted_goals,
+        "count": len(formatted_goals)
+    }), 200
