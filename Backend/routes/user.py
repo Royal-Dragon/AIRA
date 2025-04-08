@@ -4,6 +4,10 @@ from bson import ObjectId
 from werkzeug.security import generate_password_hash
 from routes.auth import verify_jwt_token
 import logging
+from model_memory import generate_user_story
+from database.models import get_collection
+from database.models import chat_history_collection
+from model_memory import generate_motivational_message_from_chat_history
 
 logger = logging.getLogger(__name__)
 
@@ -89,3 +93,39 @@ def update_profile():
 
     logger.info(f"Profile updated for user {user_id}")
     return jsonify({"message": "Profile updated successfully"}), 200
+
+@user_bp.route('/generate_story', methods=['GET'])
+def generate_story():
+    user_id = request.args.get("user_id")
+    # print("\n user : ", user_id)
+    brain_collection = get_collection("aira_brain")
+
+    try:
+        user_object_id = ObjectId(user_id)
+    except Exception as e:
+        logger.error(f"Invalid user_id format: {str(e)}")
+        return jsonify({"error": "Invalid user_id format"}), 400
+
+    # Find the user and their goals
+    user = brain_collection.find_one({"user_id": user_object_id})
+    if not user:
+        return jsonify({"error": "User not found in AIRA's Brain"}), 404
+    
+    print("\n user : ", user)
+
+
+    story = generate_user_story(user)
+    return jsonify({"story": story})
+
+@user_bp.route('/send_motivation', methods=['GET'])
+def send_motivation():
+    user_id = request.args.get("user_id")
+    user_chat_history = chat_history_collection.find_one({"user_id": ObjectId(user_id)})
+    if not user_chat_history:
+        return jsonify({"message": "No chat history found"}), 404
+
+    motivation = generate_motivational_message_from_chat_history(user_chat_history)
+
+    return jsonify({
+        "message": motivation
+    })
