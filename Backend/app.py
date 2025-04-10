@@ -39,6 +39,7 @@ if db_initialized:
     from routes.user import user_bp
     from routes.reminders import reminder_bp
     from routes.vision_board import visionboard_bp
+    from routes.sentiment import sentiment_bp
 
     # Register Blueprints
     app.register_blueprint(auth_bp)
@@ -48,7 +49,7 @@ if db_initialized:
     app.register_blueprint(user_bp)
     app.register_blueprint(reminder_bp)
     app.register_blueprint(visionboard_bp)
-    # app.register_blueprint(model_api_bp)
+    app.register_blueprint(sentiment_bp)
     
 
 @app.route("/health", methods=["GET"])
